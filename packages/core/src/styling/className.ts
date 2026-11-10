@@ -1,0 +1,132 @@
+import type {
+  ComponentNodeModel,
+  CustomProperty,
+  ElementNodeModel,
+  NodeStyleModel,
+} from '../component/component.types'
+import type { Nullable } from '../types'
+import { appendUnit } from './customProperty'
+import { generateAlphabeticName, hash } from './hash'
+import type { StyleVariant } from './variantSelector'
+
+// Classnames are reused a lot, and JS hashing is expensive, so there is benefit in caching them in a native hashmap.
+const CLASSNAME_LOOKUP = new Map<string, string>()
+
+export const getClassName = (
+  object: [Nullable<NodeStyleModel>, Nullable<StyleVariant[]>],
+) => {
+  const stringified = JSON.stringify(
+    object.filter(
+      (item) =>
+        item !== null && // Skip nullish values
+        item !== undefined &&
+        (Array.isArray(item) ? item.length > 0 : true) && // Skip empty arrays/objects
+        (typeof item === 'object' ? Object.keys(item).length > 0 : true),
+    ),
+  )
+  if (CLASSNAME_LOOKUP.has(stringified)) {
+    return CLASSNAME_LOOKUP.get(stringified)!
+  }
+  const className = generateAlphabeticName(hash(stringified))
+  CLASSNAME_LOOKUP.set(stringified, className)
+  return className
+}
+
+// Path classnames are reused heavily (one per node render), so we want to cache them
+// Kept separate from CLASSNAME_LOOKUP to avoid key collisions between paths and stringified style objects.
+const PATH_CLASSNAME_LOOKUP = new Map<string, string>()
+
+export const getPathClassName = (path: string) => {
+  const cached = PATH_CLASSNAME_LOOKUP.get(path)
+  if (cached) {
+    return cached
+  }
+  const className = generateAlphabeticName(hash(path))
+  PATH_CLASSNAME_LOOKUP.set(path, className)
+  return className
+}
+
+const getStaticCustomPropertyStyles = (
+  customProperties: Record<`--${string}`, CustomProperty> | undefined,
+) => {
+  if (!customProperties) {
+    return {}
+  }
+  const result: Record<string, any> = {}
+  for (const key in customProperties) {
+    const value = customProperties[key as `--${string}`]!
+    if (value.formula?.type === 'value') {
+      result[key] = appendUnit(value.formula.value, value.unit)
+    }
+  }
+  return result
+}
+const mergeStaticStyle = (
+  style: NodeStyleModel | undefined | null,
+  customProperties: Record<`--${string}`, CustomProperty> | undefined,
+): Nullable<NodeStyleModel> => {
+  if (!style && !customProperties) {
+    return undefined
+  }
+  const staticStyles = getStaticCustomPropertyStyles(customProperties)
+  const merged = { ...staticStyles, ...style }
+  return Object.keys(merged).length > 0 ? merged : undefined
+}
+
+export const getStaticStyleAndVariants = (
+  node: ElementNodeModel | ComponentNodeModel,
+) => {
+  const variants =
+    node.variants ??
+    (node.style?.variants as unknown as StyleVariant[] | undefined)
+
+  if (!node.style && !node.customProperties && !variants) {
+    return [undefined, undefined] as [
+      Nullable<NodeStyleModel>,
+      Nullable<StyleVariant[]>,
+    ]
+  }
+
+  const staticStyle = mergeStaticStyle(
+    node.style,
+    node.customProperties ?? undefined,
+  )
+  const mappedVariants = variants?.map((variant) => ({
+    ...variant,
+    style: mergeStaticStyle(
+      variant.style,
+      variant.customProperties ?? undefined,
+    ),
+  }))
+
+  return [
+    staticStyle,
+    mappedVariants && mappedVariants.length > 0 ? mappedVariants : undefined,
+  ] as [Nullable<NodeStyleModel>, Nullable<StyleVariant[]>]
+}
+
+export const toValidClassName = (
+  input: string,
+  escapeSpecialCharacters = false,
+) => {
+  // Replace invalid characters with hyphens
+  let className = input
+    // Remove leading and trailing whitespace
+    .trim()
+    // Replace whitespace with hyphens
+    .replace(/\s+/g, '-')
+
+  if (escapeSpecialCharacters) {
+    className = className.replace(/[^a-zA-Z0-9-_]/g, (match) => `\\${match}`)
+  }
+
+  // Ensure the class name doesn't start with a number or special character
+  if (className.length > 0) {
+    const code = className.charCodeAt(0)
+    if (!((code >= 65 && code <= 90) || (code >= 97 && code <= 122))) {
+      className = `_${className}`
+    }
+  }
+
+  return className
+}

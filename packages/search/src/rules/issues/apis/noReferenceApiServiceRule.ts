@@ -1,0 +1,56 @@
+import { isDefined, isLegacyApi } from '@nordcraft/core'
+import type { IssueRule, ProjectApiService } from '../../../types'
+import { removeFromPathFix } from '../../../util/removeUnused.fix'
+
+export const noReferenceApiServiceRule: IssueRule<
+  { serviceName: string },
+  ProjectApiService
+> = {
+  code: 'no-reference api service',
+  level: 'warning',
+  category: 'No References',
+  nodeTypes: 'api-service',
+  visit: (report, args) => {
+    const { value, memo, path } = args
+    const serviceName = path.at(-1)
+    if (typeof serviceName !== 'string') {
+      return
+    }
+
+    const apiServiceReferences = memo(`apiServiceReferences`, () => {
+      const usedServices = new Set<string>()
+      Object.values(args.files.components).forEach((component) => {
+        if (!component) {
+          return
+        }
+        Object.values(component.apis ?? {}).forEach((api) => {
+          if (
+            isDefined(api) &&
+            !isLegacyApi(api) &&
+            typeof api.service === 'string'
+          ) {
+            usedServices.add(api.service)
+          }
+        })
+      })
+      return usedServices
+    })
+    if (apiServiceReferences.has(value.name)) {
+      return
+    }
+    report({
+      path: args.path,
+      info: {
+        title: 'Unused API Service',
+        description: `**${serviceName}** is never used by any API. Consider removing it.`,
+      },
+      details: { serviceName },
+      fixes: ['delete-api-service'],
+    })
+  },
+  fixes: {
+    'delete-api-service': removeFromPathFix,
+  },
+}
+
+export type NoReferenceApiServiceRuleFix = 'delete-api-service'

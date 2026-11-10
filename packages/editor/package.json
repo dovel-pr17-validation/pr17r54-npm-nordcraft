@@ -1,0 +1,22 @@
+{
+  "name": "@nordcraft/editor",
+  "scripts": {
+    "buildCssKeywords": "bun run css-properties/fetchCssPropertyKeywords.ts",
+    "postbuildCssKeywords": "bun run prettier:write",
+    "buildElements": "cd elements && bun buildElements.ts",
+    "postbuildElements": "bun run prettier:write",
+    "buildInterfaces": "cd elements && bun buildInterfaces.ts",
+    "postbuildInterfaces": "bun run prettier:write",
+    "prettier:write": "prettier --write 'elements/**/*.json' 'css-properties/cssPropertyKeywords.json'",
+    "typecheck": "bun check",
+    "watch": "tsgo --noEmit --watch"
+  },
+  "devDependencies": {
+    "@nordcraft/core": "workspace:*",
+    "@types/css-tree": "2.3.11",
+    "@webref/elements": "2.7.1",
+    "@webref/events": "1.27.0",
+    "css-tree": "3.2.1",
+    "mdn-data": "2.37.2"
+  }
+}

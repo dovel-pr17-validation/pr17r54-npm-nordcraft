@@ -1,0 +1,441 @@
+import type {
+  AnimationKeyframe,
+  Component,
+  ComponentData,
+  FormulaHandlerV2,
+  OldTheme,
+  PluginAction,
+  PluginActionV2,
+  PluginFormula,
+  TestScenario,
+  Theme,
+} from '@nordcraft/core'
+import type { getRectData } from './overlay'
+
+export type EditorMode = 'design' | 'test'
+
+export type InsertDivTool = 'insert-div'
+export type InsertTextTool = 'insert-text'
+export type InsertCanvasTool = InsertDivTool | InsertTextTool
+export type CanvasTool = 'select' | 'pan' | InsertCanvasTool
+
+export type CanvasElementType = 'div' | 'text'
+export type InsertElementType = CanvasElementType
+
+export type NordcraftPreviewEvent =
+  | {
+      type: 'style_variant_changed'
+      variantIndex: number | null
+    }
+  | {
+      type: 'component'
+      component: Component
+    }
+  | { type: 'components'; components: Component[] }
+  | {
+      type: 'packages'
+      packages: Record<
+        string,
+        {
+          components: Record<string, Component>
+          formulas: Record<
+            string,
+            PluginFormula<FormulaHandlerV2> | PluginFormula<string>
+          >
+          actions: Record<string, PluginActionV2 | PluginAction>
+          manifest: {
+            name: string
+            // commit represents the commit hash (version) of the package
+            commit: string
+          }
+        }
+      >
+    }
+  | {
+      type: 'global_formulas'
+      formulas: Record<
+        string,
+        PluginFormula<FormulaHandlerV2> | PluginFormula<string>
+      >
+    }
+  | {
+      type: 'global_actions'
+      actions: Record<string, PluginActionV2 | PluginAction>
+    }
+  | { type: 'theme'; theme: Record<string, OldTheme | Theme> }
+  | { type: 'mode'; mode: EditorMode }
+  | {
+      type: 'selection'
+      selectedNodeId: string | null
+      repeatNodeIndex?: number | null
+    }
+  | {
+      type: 'highlight'
+      highlightedNodeId: string | null
+      repeatNodeIndex?: number | null
+    }
+  | {
+      type: 'click' | 'mousemove' | 'mousedown' | 'dblclick'
+      metaKey: boolean
+      x: number
+      y: number
+      buttons: number
+      canvasTool: CanvasTool
+    }
+  | { type: 'report_document_scroll_size' }
+  | { type: 'reload' }
+  | { type: 'fetch_api'; apiKey: string }
+  | { type: 'introspect_qraphql_api'; apiKey: string }
+  | { type: 'drag-started'; x: number; y: number }
+  | { type: 'drag-ended'; canceled?: true }
+  | {
+      type: 'insert-started'
+      x: number
+      y: number
+      canvasTool: CanvasTool
+    }
+  | { type: 'insert-ended'; canceled?: true }
+  | { type: 'keydown'; key: string; altKey: boolean; metaKey: boolean }
+  | { type: 'keyup'; key: string; altKey: boolean; metaKey: boolean }
+  | {
+      type: 'get_computed_style'
+      styles?: string[]
+    }
+  | {
+      type: 'set_timeline_keyframes'
+      keyframes: Record<string, AnimationKeyframe> | null
+    }
+  | {
+      type: 'set_timeline_time'
+      time: number | null
+      timingFunction:
+        | 'linear'
+        | 'ease'
+        | 'ease-in'
+        | 'ease-out'
+        | 'ease-in-out'
+        | 'step-start'
+        | 'step-end'
+        | string
+        | undefined
+      fillMode: 'none' | 'forwards' | 'backwards' | 'both' | undefined
+      iteration: number
+    }
+  | {
+      type: 'preview_style'
+      styles: Record<string, string> | null
+      theme?: {
+        key: string
+        value: Theme
+      }
+    }
+  | {
+      type: 'preview_resources'
+      resources: ReadonlyArray<{
+        type: 'link'
+        href: string
+      }>
+    }
+  | {
+      type: 'preview_theme'
+      theme: string | null
+    }
+  | {
+      type: 'preview_state'
+      state?: TestScenario | null
+    }
+  | {
+      type: 'viewport_size'
+      height: number
+      enabled: boolean
+    }
+  | { type: 'capture_screenshot'; id: string; viewportWidth?: number }
+
+export type EditorPostMessageType =
+  | {
+      type: 'textComputedStyle'
+      computedStyle: Record<string, string>
+    }
+  | {
+      type: 'selection'
+      selectedNodeId: string | null
+      repeatNodeIndex?: number | null
+    }
+  | {
+      type: 'highlight'
+      highlightedNodeId: string | null
+      exactHighlightedNodeId?: string | null
+      repeatNodeIndex?: number | null
+    }
+  | {
+      type: 'navigate'
+      name: string
+    }
+  | {
+      type: 'documentScrollSize'
+      scrollHeight: number
+    }
+  | {
+      type: 'nodeMoved'
+      copy: boolean
+      parent?: string | null
+      index?: number
+      slot?: string
+      'justify-content'?: string
+      'align-items'?: string
+      'flex-direction'?: string
+    }
+  | {
+      type: 'insertNode'
+      parent?: string | null
+      index?: number
+      slot?: string
+      'justify-content'?: string
+      'align-items'?: string
+      'flex-direction'?: string
+    }
+  | {
+      type: 'computedStyle'
+      computedStyle: Record<string, string>
+      repeatedItemsValues: {
+        delay: string
+        duration: string
+      }[]
+      timelineTime: { delay: string; duration: string }
+    }
+  | {
+      type: 'style'
+      time: string
+    }
+  | {
+      type: 'component event'
+      event: any
+      time: string
+      data: any
+    }
+  | {
+      type: 'keydown'
+      event: {
+        key: string
+        code?: string
+        metaKey: boolean
+        ctrlKey?: boolean
+        shiftKey: boolean
+        altKey: boolean
+      }
+    }
+  | {
+      type: 'keyup'
+      event: {
+        key: string
+        code?: string
+        metaKey: boolean
+        ctrlKey?: boolean
+        shiftKey: boolean
+        altKey: boolean
+      }
+    }
+  | {
+      type: 'keypress'
+      event: {
+        key: string
+        code?: string
+        metaKey: boolean
+        ctrlKey?: boolean
+        shiftKey: boolean
+        altKey: boolean
+      }
+    }
+  | { type: 'data'; data: ComponentData }
+  | {
+      type: 'componentFormulaData'
+      data: Record<string, any>
+      component?: string
+    }
+  | {
+      type: 'selectionRect'
+      rect: ReturnType<typeof getRectData>
+    }
+  | {
+      type: 'highlightRect'
+      rect: ReturnType<typeof getRectData>
+    }
+  | {
+      type: 'introspectionResult'
+      data: any
+      apiKey: string
+    }
+  | {
+      type: 'updateTextNodeContent'
+      innerText: string
+      nodeId: string | null
+    }
+  | {
+      type: 'screenshot'
+      id: string
+      file: {
+        type: string
+        size: number
+        dimensions: { width: number; height: number } | null
+        url: string
+      } | null
+      error?: string
+    }
+  | {
+      type: 'requestViewportWidth'
+      width: number
+    }
+
+export type DragInsertState = {
+  /**
+   * Dragging elements within the initial container is a reorder operation while dragging elements outside the initial container is an insert operation.
+   * While they share some common properties, we need to differentiate between the two to handle them differently.
+   */
+  mode: 'reorder' | 'insert'
+  /**
+   * How the drag started: moving an existing element (`drag`) or placing a
+   * new one (`insert`). Survives mode switches, unlike `mode`.
+   */
+  action: 'drag' | 'insert'
+  elementType: 'element' | 'component' | 'text'
+  copy?: HTMLElement
+  element: HTMLElement
+  repeatedNodes: HTMLElement[]
+  offset: Point
+  lastCursorPosition: Point
+  initialContainer: HTMLElement
+  initialNextSibling: Element | null
+  initialRect: DOMRect
+  reorderPermutations: Array<{
+    nextSibling: Node | null
+    rect: DOMRect
+  }>
+  flipAnimations: Animation[]
+  /**
+   * Whether the dragged element was the sole child of its container when
+   * the drag (re)started — counting the element itself even when detached,
+   * plus any copy.
+   */
+  isSoleChildDrag: boolean
+  metaKey?: boolean
+  /**
+   * Original drag home, stashed on the first hover-insert re-homing. The
+   * hover placement never commits: cancelling still falls back here instead
+   * of the hover position.
+   */
+  trueOrigin?: { container: HTMLElement; nextSibling: Element | null }
+  /**
+   * Hover-to-insert tracking: while the cursor rests on one drop target the
+   * highlight blinks, then the element is placed and the drag continues
+   * from there. Same-target hovers keep counting; anything else resets it.
+   */
+  hover?: {
+    key: number
+    blinking: boolean
+    timeout?: ReturnType<typeof setTimeout>
+    interval?: ReturnType<typeof setInterval>
+  }
+  hoverPlacement?: {
+    parent: Element
+    index: number
+    slot?: string
+    styleProps: {
+      'justify-content'?: string
+      'align-items'?: string
+      'flex-direction'?: 'row' | 'column'
+    }
+  }
+  selectedInsertAreaIndex?: number
+  insertAreas?: Array<InsertArea>
+  destroying: boolean
+}
+
+export type InsertArea = {
+  layout: 'block' | 'inline'
+  parent: Element
+  indexAll: number
+  index: number
+  slot?: string
+  center: Point
+  size: number
+  direction: 1 | -1
+  bounds?: { x: number; y: number; width: number; height: number }
+  slotPlaceholder?: boolean
+  'justify-content'?: string
+  'align-items'?: string
+  'flex-direction'?: 'row' | 'column'
+}
+
+export type Point = { x: number; y: number }
+export type Line = {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  slotName?: string | null
+  parent?: Element
+  index?: number
+  direction?: 1 | -1
+}
+
+/**
+ * Styles required for rendering the same exact text again somewhere else (on a overlay rect in the editor)
+ */
+export enum TextNodeComputedStyles {
+  // Caret color is important as it is the only visible part of the text node (when text is not highlighted)
+  CARET_COLOR = 'caret-color',
+  DISPLAY = 'display',
+  FONT_FAMILY = 'font-family',
+  FONT_SIZE = 'font-size',
+  FONT_WEIGHT = 'font-weight',
+  FONT_STYLE = 'font-style',
+  FONT_VARIANT = 'font-variant',
+  FONT_STRETCH = 'font-stretch',
+  LINE_HEIGHT = 'line-height',
+  TEXT_ALIGN = 'text-align',
+  TEXT_TRANSFORM = 'text-transform',
+  LETTER_SPACING = 'letter-spacing',
+  WHITE_SPACE = 'white-space',
+  WORD_SPACING = 'word-spacing',
+  TEXT_INDENT = 'text-indent',
+  TEXT_OVERFLOW = 'text-overflow',
+  TEXT_RENDERING = 'text-rendering',
+  WORD_BREAK = 'word-break',
+  WORD_WRAP = 'word-wrap',
+  DIRECTION = 'direction',
+  UNICODE_BIDI = 'unicode-bidi',
+  VERTICAL_ALIGN = 'vertical-align',
+  FONT_KERNING = 'font-kerning',
+  FONT_FEATURE_SETTINGS = 'font-feature-settings',
+  FONT_VARIATION_SETTINGS = 'font-variation-settings',
+  FONT_SMOOTHING = '-webkit-font-smoothing',
+  ANTI_ALIASING = '-moz-osx-font-smoothing',
+  FONT_OPTICAL_SIZING = 'font-optical-sizing',
+  TAB_SIZE = 'tab-size',
+  HYPHENS = 'hyphens',
+  TEXT_ORIENTATION = 'text-orientation',
+  WRITING_MODE = 'writing-mode',
+  LINE_BREAK = 'line-break',
+  OVERFLOW_WRAP = 'overflow-wrap',
+}
+
+export type SelectionState = {
+  anchor: SelectionAnchor | null
+  mode: SelectionMode
+}
+
+export type SelectionMode = 'char' | 'word' | 'all'
+
+export type SelectionAnchor = {
+  node: Node
+  offset: number
+  wordStart: number
+  wordEnd: number
+}
+
+export type PointerState = {
+  lastPressPosition: Point
+  buttons: number
+  lastPressTime: number
+  pressCount: number
+}

@@ -1,0 +1,61 @@
+import { isLegacyPluginAction } from '@nordcraft/core'
+import type { CustomActionModelArgumentNode, IssueRule } from '../../../types'
+import { removeFromPathFix } from '../../../util/removeUnused.fix'
+
+export const unknownActionArgumentRule: IssueRule<
+  { name: string },
+  CustomActionModelArgumentNode
+> = {
+  code: 'unknown action argument',
+  level: 'warning',
+  category: 'Unknown Reference',
+  nodeTypes: 'action-custom-model-argument',
+  visit: (report, { path, files, value }) => {
+    const { action, argument, argumentIndex } = value
+    if (action.name.startsWith('@toddle')) {
+      return
+    }
+    const referencedAction = (
+      action.package ? files.packages?.[action.package]?.actions : files.actions
+    )?.[action.name]
+    if (!referencedAction) {
+      return
+    }
+    const referencedActionArguments = referencedAction.arguments ?? []
+    if (isLegacyPluginAction(referencedAction)) {
+      if (argumentIndex >= referencedActionArguments.length) {
+        const name = argument.name ?? `argument at position ${argumentIndex}`
+        report({
+          path,
+          info: {
+            title: 'Unknown action argument',
+            description: `The argument **${name}** does not exist in the referenced action.`,
+          },
+          details: {
+            name,
+          },
+          fixes: ['delete-unknown-action-argument'],
+        })
+      }
+    } else if (
+      !referencedAction.arguments?.some((a) => a.name === argument.name)
+    ) {
+      report({
+        path,
+        info: {
+          title: 'Unknown action argument',
+          description: `The argument **${argument.name}** does not exist in the referenced action.`,
+        },
+        details: {
+          name: argument.name,
+        },
+        fixes: ['delete-unknown-action-argument'],
+      })
+    }
+  },
+  fixes: {
+    'delete-unknown-action-argument': removeFromPathFix,
+  },
+}
+
+export type UnknownActionArgumentRuleFix = 'delete-unknown-action-argument'

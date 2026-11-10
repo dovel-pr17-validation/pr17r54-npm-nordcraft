@@ -1,0 +1,681 @@
+import { createInterface } from 'node:readline'
+import {
+  getBoolean,
+  getNonNegativeInteger,
+  getOptionalString,
+  getPositiveInteger,
+  parseBenchmarkArgs,
+} from '../benchmarks/cli'
+import {
+  isSsrBenchmarkCaseId,
+  ssrBenchmarkUsage,
+  type SsrBenchmarkCaseId,
+} from '../benchmarks/ssrCases'
+import type {
+  ComponentData,
+  PageComponent,
+} from '../packages/core/dist/component/component.types'
+import { isPageComponent } from '../packages/core/dist/component/isPageComponent'
+import type {
+  FormulaContext,
+  ToddleServerEnv,
+} from '../packages/core/dist/formula/formula'
+import {
+  applyFormula,
+  type Formula,
+} from '../packages/core/dist/formula/formula'
+import { takeIncludedComponents } from '../packages/ssr/dist/components/utils'
+import { renderPageBody } from '../packages/ssr/dist/rendering/components'
+import {
+  getPageFormulaContext,
+  serverEnv,
+} from '../packages/ssr/dist/rendering/formulaContext'
+import type { ProjectFiles } from '../packages/ssr/dist/ssr.types'
+
+type BenchmarkProject = {
+  files: ProjectFiles
+}
+
+type BenchmarkRunner = () => Promise<void>
+
+type BenchmarkSample = {
+  timeMs: number
+  heapDeltaKb: number
+}
+
+type WorkerRequest = { type: 'close' } | { type: 'run'; count?: number }
+
+type WorkerResponse = BenchmarkSample | { error: string }
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null
+
+const isWorkerRequest = (value: unknown): value is WorkerRequest => {
+  if (!isRecord(value) || typeof value.type !== 'string') {
+    return false
+  }
+  if (value.type === 'close') {
+    return !('count' in value)
+  }
+  return (
+    value.type === 'run' &&
+    (value.count === undefined ||
+      (typeof value.count === 'number' &&
+        Number.isInteger(value.count) &&
+        value.count >= 1))
+  )
+}
+
+type SsrArgs = {
+  caseId: SsrBenchmarkCaseId
+  repeat: number
+  isWorker: boolean
+  runs: number
+  warmup: number
+  outputPath?: string
+  json: boolean
+}
+
+export const parseSsrArgs = (
+  argv: readonly string[] = Bun.argv.slice(2),
+): SsrArgs => {
+  const args = parseBenchmarkArgs(argv)
+  const caseId = args.get('--case')
+  if (!isSsrBenchmarkCaseId(caseId)) {
+    throw new Error(`Usage: bun bin/ssrBenchmark.ts ${ssrBenchmarkUsage()}`)
+  }
+
+  return {
+    caseId,
+    repeat: getPositiveInteger(args, '--repeat', 1),
+    isWorker: getBoolean(args, '--worker', false),
+    runs: getPositiveInteger(args, '--runs', 1),
+    warmup: getNonNegativeInteger(args, '--warmup', 0),
+    outputPath: getOptionalString(args, '--output'),
+    json: getBoolean(args, '--json', false),
+  }
+}
+
+const loadProjectFixture = async (fileName: string) => {
+  const fixtureUrl = new URL(
+    `../benchmarks/browser/fixtures/${fileName}`,
+    import.meta.url,
+  )
+  return (await Bun.file(fixtureUrl).json()) as BenchmarkProject
+}
+
+const createFormulaCase = (): BenchmarkRunner => {
+  const data: ComponentData & {
+    values: Array<{
+      id: number
+      title: string
+      enabled: boolean
+      score: number
+      flags: {
+        featured: boolean
+        archived: boolean
+      }
+    }>
+  } = {
+    Attributes: {},
+    values: Array.from({ length: 256 }, (_, i) => ({
+      id: i,
+      title: `item-${i}`,
+      enabled: i % 3 !== 0,
+      score: i,
+      flags: {
+        featured: i % 5 === 0,
+        archived: i % 11 === 0,
+      },
+    })),
+  }
+
+  const formula: Formula = {
+    type: 'object',
+    arguments: [
+      {
+        name: 'meta',
+        formula: {
+          type: 'object',
+          arguments: [
+            {
+              name: 'title',
+              formula: {
+                type: 'path',
+                path: ['values', 0, 'title'],
+              },
+            },
+            {
+              name: 'id',
+              formula: {
+                type: 'path',
+                path: ['values', 0, 'id'],
+              },
+            },
+          ],
+        },
+      },
+      {
+        name: 'renderInfo',
+        formula: {
+          type: 'object',
+          arguments: [
+            {
+              name: 'canRender',
+              formula: {
+                type: 'and',
+                arguments: [
+                  {
+                    formula: {
+                      type: 'path',
+                      path: ['values', 0, 'enabled'],
+                    },
+                  },
+                  {
+                    formula: {
+                      type: 'or',
+                      arguments: [
+                        {
+                          formula: {
+                            type: 'path',
+                            path: ['values', 0, 'flags', 'featured'],
+                          },
+                        },
+                        {
+                          formula: {
+                            type: 'and',
+                            arguments: [
+                              {
+                                formula: {
+                                  type: 'value',
+                                  value: true,
+                                },
+                              },
+                              {
+                                formula: {
+                                  type: 'path',
+                                  path: ['values', 0, 'flags', 'archived'],
+                                },
+                              },
+                            ],
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              name: 'label',
+              formula: {
+                type: 'switch',
+                cases: [
+                  {
+                    condition: {
+                      type: 'path',
+                      path: ['values', 0, 'flags', 'featured'],
+                    },
+                    formula: {
+                      type: 'value',
+                      value: 'featured',
+                    },
+                  },
+                  {
+                    condition: {
+                      type: 'path',
+                      path: ['values', 0, 'flags', 'archived'],
+                    },
+                    formula: {
+                      type: 'value',
+                      value: 'archived',
+                    },
+                  },
+                ],
+                default: {
+                  type: 'value',
+                  value: 'normal',
+                },
+              },
+            },
+          ],
+        },
+      },
+      {
+        name: 'score',
+        formula: {
+          type: 'path',
+          path: ['values', 0, 'score'],
+        },
+      },
+    ],
+  }
+
+  const ctx: FormulaContext = {
+    component: undefined,
+    formulaCache: {},
+    package: undefined,
+    toddle: {
+      getFormula: () => undefined,
+      getCustomFormula: () => undefined,
+      errors: [],
+    },
+    env: serverEnv({
+      branchName: 'main',
+      logErrors: false,
+      req: new Request('http://localhost/benchmark'),
+    }),
+  }
+  // Backward compatibility for when "data" was passed through the context object
+  ;(ctx as any).data = data
+
+  return async () => {
+    let sum = 0
+    for (let i = 0; i < 3_000; i++) {
+      const index = i % data.values.length
+      data.values[0] = data.values[index]
+      const result = applyFormula(formula, ctx, data as any)
+      if (result?.renderInfo?.canRender) {
+        sum += result.meta?.id ?? 0
+      }
+    }
+
+    if (sum < 0) {
+      throw new Error('Unexpected benchmark guard')
+    }
+  }
+}
+
+const resolvePageFormulaContext = (
+  result: ReturnType<typeof getPageFormulaContext>,
+): {
+  formulaContext: FormulaContext & { env: ToddleServerEnv }
+  data: ComponentData
+} => {
+  if (isRecord(result) && 'formulaContext' in result) {
+    const formulaContext = result.formulaContext as FormulaContext & {
+      env: ToddleServerEnv
+    }
+    const data = result.data as ComponentData
+    ;(formulaContext as any).data = data
+    return { formulaContext, data }
+  }
+
+  const formulaContext = result as unknown as FormulaContext & {
+    env: ToddleServerEnv
+    data: ComponentData
+  }
+  return { formulaContext, data: formulaContext.data }
+}
+
+const createCollectionsHotPathRenderCase =
+  async (): Promise<BenchmarkRunner> => {
+    const project = await loadProjectFixture('benchmark-project.json')
+    const files = project.files
+    const page = files.components.HomePage
+
+    if (!page || !isPageComponent(page)) {
+      throw new Error('No HomePage component found in benchmark project')
+    }
+
+    const pageComponent: PageComponent = page
+    const items = Array.from({ length: 80 }, (_, i) => ({
+      id: `item-${i}`,
+      title: `Card ${i}`,
+    }))
+    const includedComponents = takeIncludedComponents({
+      packages: files.packages,
+      root: pageComponent,
+      includeRoot: true,
+      projectComponents: files.components,
+    })
+    const req = new Request('http://localhost/benchmark')
+
+    return async () => {
+      const { formulaContext, data } = resolvePageFormulaContext(
+        getPageFormulaContext({
+          component: pageComponent,
+          branchName: 'main',
+          req,
+          logErrors: false,
+          files,
+        }),
+      )
+      data.Variables = {
+        ...data.Variables,
+        items,
+      }
+
+      const result = await renderPageBody({
+        component: pageComponent,
+        env: formulaContext.env,
+        evaluateComponentApis: async () => ({}),
+        files,
+        formulaContext,
+        data,
+        includedComponents,
+        req,
+        projectId: 'benchmark-project',
+      })
+
+      if (result.html.length === 0) {
+        throw new Error('Empty HTML from collections benchmark case')
+      }
+    }
+  }
+
+const createProjectRenderCase = async (): Promise<BenchmarkRunner> => {
+  const project = await loadProjectFixture('nordcraft.com.json')
+  const files = project.files
+  const page = files.components.nordcraft
+
+  if (!page || !isPageComponent(page)) {
+    throw new Error('No page component found in example project')
+  }
+
+  const pageComponent: PageComponent = page
+  const req = new Request('http://localhost/')
+  const includedComponents = takeIncludedComponents({
+    packages: files.packages,
+    root: pageComponent,
+    includeRoot: true,
+    projectComponents: files.components,
+  })
+
+  return async () => {
+    const { formulaContext, data } = resolvePageFormulaContext(
+      getPageFormulaContext({
+        component: pageComponent,
+        branchName: 'main',
+        req,
+        logErrors: false,
+        files,
+      }),
+    )
+
+    const result = await renderPageBody({
+      component: pageComponent,
+      env: formulaContext.env,
+      evaluateComponentApis: async () => ({}),
+      files,
+      formulaContext,
+      data,
+      includedComponents,
+      req,
+      projectId: 'nordcraft',
+    })
+
+    if (result.html.length === 0) {
+      throw new Error('Empty HTML from project render benchmark')
+    }
+  }
+}
+
+const createFixturePageRenderCase = async ({
+  fixtureFile,
+  pageName,
+  projectId,
+  url = 'http://localhost/benchmark',
+  variables,
+  expectedMarker,
+}: {
+  fixtureFile: string
+  pageName: string
+  projectId: string
+  url?: string
+  variables?: Record<string, unknown>
+  expectedMarker?: string
+}): Promise<BenchmarkRunner> => {
+  const project = await loadProjectFixture(fixtureFile)
+  const files = project.files
+  const page = files.components[pageName]
+
+  if (!page) {
+    throw new Error(`No ${pageName} component found in ${fixtureFile}`)
+  }
+
+  // Synthetic benchmark pages (StylesPage, ContextPage, LifecyclePage) are
+  // plain components without a route. getPageFormulaContext expects a page,
+  // so synthesize a minimal route for them.
+  const pageComponent: PageComponent = (
+    isPageComponent(page)
+      ? page
+      : { ...page, route: { info: {}, path: [], query: {} } }
+  ) as PageComponent
+  const includedComponents = takeIncludedComponents({
+    packages: files.packages,
+    root: pageComponent,
+    includeRoot: true,
+    projectComponents: files.components,
+  })
+  const req = new Request(url)
+
+  return async () => {
+    const { formulaContext, data } = resolvePageFormulaContext(
+      getPageFormulaContext({
+        component: pageComponent,
+        branchName: 'main',
+        req,
+        logErrors: false,
+        files,
+      }),
+    )
+    if (variables) {
+      data.Variables = {
+        ...data.Variables,
+        ...variables,
+      }
+    }
+
+    const result = await renderPageBody({
+      component: pageComponent,
+      env: formulaContext.env,
+      evaluateComponentApis: async () => ({}),
+      files,
+      formulaContext,
+      data,
+      includedComponents,
+      req,
+      projectId,
+    })
+
+    if (result.html.length === 0) {
+      throw new Error(`Empty HTML from ${pageName} benchmark case`)
+    }
+    if (expectedMarker && !result.html.includes(expectedMarker)) {
+      throw new Error(
+        `Missing expected marker "${expectedMarker}" in ${pageName} benchmark output`,
+      )
+    }
+  }
+}
+
+const createPricingPageRenderCase = (): Promise<BenchmarkRunner> =>
+  createFixturePageRenderCase({
+    fixtureFile: 'nordcraft.com.json',
+    pageName: 'pricing',
+    projectId: 'nordcraft',
+    url: 'http://localhost/pricing',
+    expectedMarker: 'data-id',
+  })
+
+const createLargeListRenderCase = (): Promise<BenchmarkRunner> =>
+  createFixturePageRenderCase({
+    fixtureFile: 'benchmark-project.json',
+    pageName: 'HomePage',
+    projectId: 'benchmark-project',
+    variables: {
+      items: Array.from({ length: 200 }, (_, i) => ({
+        id: `item-${i}`,
+        title: `Benchmark Item ${i}`,
+      })),
+    },
+    expectedMarker: 'benchmark-list',
+  })
+
+const createStyleVariablesRenderCase = (): Promise<BenchmarkRunner> =>
+  createFixturePageRenderCase({
+    fixtureFile: 'benchmark-project.json',
+    pageName: 'StylesPage',
+    projectId: 'benchmark-project',
+    expectedMarker: 'styles-list',
+  })
+
+const createContextPropagationRenderCase = (): Promise<BenchmarkRunner> =>
+  createFixturePageRenderCase({
+    fixtureFile: 'benchmark-project.json',
+    pageName: 'ContextPage',
+    projectId: 'benchmark-project',
+    expectedMarker: 'context-consumer-list',
+  })
+
+const createConditionalSubtreeRenderCase = (): Promise<BenchmarkRunner> =>
+  createFixturePageRenderCase({
+    fixtureFile: 'benchmark-project.json',
+    pageName: 'LifecyclePage',
+    projectId: 'benchmark-project',
+    variables: { showSubtree: true },
+    expectedMarker: 'lifecycle-container',
+  })
+
+export const createRunner = async (id: SsrBenchmarkCaseId) => {
+  switch (id) {
+    case 'formula':
+      return createFormulaCase()
+    case 'collections-hot-path':
+      return createCollectionsHotPathRenderCase()
+    case 'example-project-homepage':
+      return createProjectRenderCase()
+    case 'example-pricing-page':
+      return createPricingPageRenderCase()
+    case 'repeat-large-list':
+      return createLargeListRenderCase()
+    case 'style-variables':
+      return createStyleVariablesRenderCase()
+    case 'context-propagation':
+      return createContextPropagationRenderCase()
+    case 'conditional-subtree':
+      return createConditionalSubtreeRenderCase()
+  }
+}
+
+const collectGarbage = () => {
+  if (typeof Bun !== 'undefined' && typeof Bun.gc === 'function') {
+    Bun.gc(true)
+  }
+}
+
+const measure = async (
+  runner: BenchmarkRunner,
+  repeat: number,
+  count = 1,
+): Promise<BenchmarkSample> => {
+  collectGarbage()
+  const heapBefore = process.memoryUsage().heapUsed
+  const start = performance.now()
+  for (let i = 0; i < count * repeat; i++) {
+    await runner()
+  }
+  const timeMs = (performance.now() - start) / (count * repeat)
+  // Bun only refreshes the used heap size when the GC runs, so collect before
+  // reading it. This measures the heap retained by the benchmark execution.
+  collectGarbage()
+  const heapAfter = process.memoryUsage().heapUsed
+  return {
+    timeMs,
+    heapDeltaKb: Math.max(
+      0,
+      (heapAfter - heapBefore) / 1024 / (count * repeat),
+    ),
+  }
+}
+
+const writeWorkerResponse = (response: WorkerResponse) => {
+  process.stdout.write(`${JSON.stringify(response)}\n`)
+}
+
+const runWorker = async (runner: BenchmarkRunner, repeat: number) => {
+  const input = createInterface({ input: process.stdin })
+
+  for await (const line of input) {
+    if (!line.trim()) {
+      continue
+    }
+
+    let request: unknown
+    try {
+      request = JSON.parse(line) as unknown
+    } catch (error) {
+      writeWorkerResponse({
+        error: error instanceof Error ? error.message : String(error),
+      })
+      continue
+    }
+
+    if (!isWorkerRequest(request)) {
+      writeWorkerResponse({ error: 'Invalid worker request' })
+      continue
+    }
+
+    if (request.type === 'close') {
+      break
+    }
+
+    if (request.type !== 'run') {
+      writeWorkerResponse({ error: `Unknown worker command: ${request.type}` })
+      continue
+    }
+
+    try {
+      const count = request.count ?? 1
+      if (!Number.isInteger(count) || count < 1) {
+        throw new Error('Worker run count must be a positive integer')
+      }
+      writeWorkerResponse(await measure(runner, repeat, count))
+    } catch (error) {
+      writeWorkerResponse({
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+}
+
+const runDirect = async (runner: BenchmarkRunner, options: SsrArgs) => {
+  for (let i = 0; i < options.warmup; i++) {
+    await measure(runner, options.repeat)
+  }
+
+  const timesMs: number[] = []
+  const heapsKb: number[] = []
+  for (let i = 0; i < options.runs; i++) {
+    const sample = await measure(runner, options.repeat)
+    timesMs.push(sample.timeMs)
+    heapsKb.push(sample.heapDeltaKb)
+  }
+  const result = {
+    caseId: options.caseId,
+    repeat: options.repeat,
+    timesMs,
+    heapsKb,
+  }
+
+  if (options.outputPath) {
+    await Bun.write(options.outputPath, `${JSON.stringify(result, null, 2)}\n`)
+  } else if (options.json) {
+    process.stdout.write(`${JSON.stringify(result)}\n`)
+  }
+}
+
+export const main = async (argv: readonly string[] = Bun.argv.slice(2)) => {
+  const options = parseSsrArgs(argv)
+  const runner = await createRunner(options.caseId)
+  if (options.isWorker) {
+    await runWorker(runner, options.repeat)
+  } else {
+    await runDirect(runner, options)
+  }
+}
+
+if (import.meta.main) {
+  await main()
+}

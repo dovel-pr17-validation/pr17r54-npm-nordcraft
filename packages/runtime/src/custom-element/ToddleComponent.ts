@@ -1,0 +1,414 @@
+import type {
+  Component,
+  ComponentAPI,
+  ComponentData,
+  ComponentFormula,
+  ComponentVariable,
+  Nullable,
+  Theme,
+  Toddle,
+  ToddleEnv,
+} from '@nordcraft/core'
+import {
+  applyFormula,
+  createStylesheet,
+  theme as defaultTheme,
+  filterObject,
+  isDefined,
+  isLegacyApi,
+  mapObject,
+  THEME_DATA_ATTRIBUTE,
+} from '@nordcraft/core'
+import '@nordcraft/core/compileTime'
+import fastDeepEqual from 'fast-deep-equal'
+import { isContextApiV2 } from '../api/apiUtils'
+import { createLegacyAPI } from '../api/createAPI'
+import { createAPI } from '../api/createAPIv2'
+import { sortApis } from '../api/sortApis'
+import { renderComponent } from '../components/renderComponent'
+import { isContextProvider } from '../context/isContextProvider'
+import type { Signal } from '../signal/signal'
+import { signal } from '../signal/signal'
+import type { ComponentContext, LocationSignal } from '../types'
+import { getThemeSignal } from '../utils/getThemeSignal'
+
+const stylesheetCache = new WeakMap<Component, string>()
+
+/**
+ * Base class for all toddle components
+ */
+export class ToddleComponent extends HTMLElement {
+  /**
+   * Public reference to the toddle instance for debugging purposes. `el.toddle.errors` can be used to check for non-verbose errors.
+   */
+  toddle: Toddle<LocationSignal, never>
+  #component: Component
+  #ctx: ComponentContext
+  #shadowRoot: ShadowRoot
+  #signal: Signal<ComponentData>
+  #files: { themes: Record<string, Theme> }
+  // Maps lowercased attribute names to their original case, so attributeChangedCallback
+  // (which receives lowercased names from observedAttributes) can look them up in the
+  // component's attributes without scanning the whole object on every change.
+  #attributeNames: Map<string, string>
+  #isSettingAttribute = false
+
+  constructor(
+    component: Component,
+    options: { components: Component[]; themes: Record<string, Theme> },
+    toddle: Toddle<LocationSignal, never>,
+  ) {
+    super()
+    this.toddle = toddle
+    const internals = this.attachInternals()
+    if (internals.shadowRoot) {
+      // Not used yet, but can be used to hydrate rather than render the shadow dom
+      this.#shadowRoot = internals.shadowRoot
+    } else {
+      this.#shadowRoot = this.attachShadow({ mode: 'open' })
+    }
+
+    const env: ToddleEnv = {
+      branchName: toddle.branch || 'main',
+      isServer: false,
+      request: undefined,
+      runtime: 'custom-element',
+      logErrors: true,
+    }
+
+    this.#component = component
+    this.#signal = createSignal({
+      component,
+      root: this.#shadowRoot,
+      toddle,
+      env,
+    })
+    this.#files = {
+      themes: options.themes,
+    }
+    this.#attributeNames = new Map(
+      Object.keys(component.attributes ?? {}).map((key) => [
+        key.toLowerCase(),
+        key,
+      ]),
+    )
+
+    // Call the abort signal if the component's datasignal is destroyed (component unmounted) to cancel any pending requests
+    const abortController = new AbortController()
+    this.#signal.subscriptions.push(() =>
+      abortController.abort(`Component ${component.name} unmounted`),
+    )
+
+    this.#ctx = {
+      triggerEvent: this.dispatch.bind(this),
+      root: this.#shadowRoot,
+      isRootComponent: true,
+      components: options.components,
+      component: this.#component,
+      dataSignal: this.#signal,
+      formulaCache: {},
+      apis: {},
+      abortSignal: abortController.signal,
+      children: {},
+      providers: {},
+      stores: {
+        theme: getThemeSignal(component, this.#signal, env),
+      },
+      package: undefined,
+      toddle,
+      env,
+      ...(IS_PREVIEW ? { jsonPath: [] } : {}),
+    }
+  }
+
+  connectedCallback() {
+    this.#ctx.stores.theme.subscribe((newTheme) => {
+      if (this.#signal.get().Page?.Theme !== newTheme) {
+        this.#signal.update(
+          (data) => ({
+            ...data,
+            Page: {
+              ...(data.Page ?? {}),
+              Theme: newTheme,
+            },
+          }),
+          { force: true },
+        )
+      }
+      if (isDefined(newTheme)) {
+        this.setAttribute(THEME_DATA_ATTRIBUTE, newTheme)
+      } else {
+        this.removeAttribute(THEME_DATA_ATTRIBUTE)
+      }
+    })
+
+    // Re-evaluate variable initial values now that initial DOM attributes and theme are populated
+    this.#signal.update((data) => ({
+      ...data,
+      Variables: mapObject(
+        filterObject<Nullable<ComponentVariable>, ComponentVariable>(
+          this.#component.variables ?? {},
+          ([_, variable]) => isDefined(variable),
+        ),
+        ([name, { initialValue }]) => [
+          name,
+          applyFormula(initialValue, this.#ctx, data),
+        ],
+      ),
+    }))
+
+    sortApis(
+      Object.entries(this.#component.apis ?? {}).filter(
+        (entry): entry is [string, ComponentAPI] => isDefined(entry[1]),
+      ),
+    ).forEach(([name, api]) => {
+      if (isLegacyApi(api)) {
+        this.#ctx.apis[name] = createLegacyAPI(
+          api,
+          IS_PREVIEW ? { ...this.#ctx, jsonPath: ['apis', name] } : this.#ctx,
+        )
+      } else {
+        this.#ctx.apis[name] = createAPI({
+          apiRequest: api,
+          ctx: IS_PREVIEW
+            ? { ...this.#ctx, jsonPath: ['apis', name] }
+            : this.#ctx,
+          componentData: this.#signal.get(),
+        })
+      }
+    })
+    Object.values(this.#ctx.apis)
+      .filter(isContextApiV2)
+      .forEach((api) => {
+        api.triggerActions(this.#signal.get())
+      })
+
+    let providers = this.#ctx.providers
+    if (isContextProvider(this.#component)) {
+      // Subscribe to exposed formulas and update the component's data signal
+      const formulaDataSignals = Object.fromEntries(
+        Object.entries(this.#component.formulas ?? {})
+          .filter(([, formula]) => formula?.exposeInContext)
+          .map(([name, formula]) => [
+            name,
+            this.#signal.map((data) =>
+              applyFormula(
+                (formula as ComponentFormula).formula,
+                this.#ctx,
+                data,
+                IS_PREVIEW ? ['formulas', name] : undefined,
+              ),
+            ),
+          ]),
+      )
+
+      providers = {
+        ...providers,
+        [this.#component.name]: {
+          component: this.#component,
+          formulaDataSignals,
+          ctx: this.#ctx,
+        },
+      }
+    }
+
+    this.#ctx.providers = providers
+    this.render()
+  }
+
+  disconnectedCallback() {
+    this.#signal.destroy()
+  }
+
+  dispatch(eventName: string, data: any) {
+    this.dispatchEvent(
+      new CustomEvent(eventName, {
+        detail: data,
+        bubbles: true,
+        composed: true,
+      }),
+    )
+  }
+
+  render() {
+    const elements = renderComponent({
+      ...this.#ctx,
+      path: '0',
+      onEvent: this.dispatch.bind(this),
+      parentElement: this.#shadowRoot,
+      instance: { [this.#component.name]: 'root' },
+    })
+
+    this.#shadowRoot.innerHTML = ''
+    let styles = stylesheetCache.get(this.#ctx.component)
+    if (styles === undefined) {
+      styles = createStylesheet(
+        this.#ctx.component,
+        this.#ctx.components,
+        Object.entries(this.#files.themes ?? {}).length > 0
+          ? this.#files.themes
+          : { defaultTheme },
+        { includeResetStyle: true, createFontFaces: false },
+      )
+      stylesheetCache.set(this.#ctx.component, styles)
+    }
+    const stylesElem = document.createElement('style')
+    stylesElem.appendChild(document.createTextNode(styles))
+    this.#shadowRoot.appendChild(stylesElem)
+    const rootElement = elements[0] as Element | null
+    if (rootElement) {
+      this.#shadowRoot.appendChild(rootElement)
+    }
+  }
+
+  // Overload the setAttribute method to allow setting complex attributes
+  setAttribute(name: string, value: unknown) {
+    if (typeof value === 'string') {
+      super.setAttribute(name, value)
+      // Return early, as signal is updated through attributeChangedCallback on string values
+      return this
+    }
+
+    this.#isSettingAttribute = true
+    try {
+      super.setAttribute(
+        name,
+        typeof value === 'number' ? String(value) : `[Object ${typeof value}]`,
+      )
+    } finally {
+      this.#isSettingAttribute = false
+    }
+
+    const attributeName = this.#attributeNames.get(name.toLowerCase()) ?? name
+
+    // Update the signal with complex value
+    if (
+      fastDeepEqual(this.#signal.get().Attributes?.[attributeName], value) ===
+      false
+    ) {
+      this.#signal.set(
+        {
+          ...this.#signal.get(),
+          Attributes: {
+            ...this.#signal.get().Attributes,
+            [attributeName]: value,
+          },
+        },
+        { force: true },
+      )
+    }
+
+    return this
+  }
+
+  // Overload the getAttribute method to point to source of truth (the signal)
+  getAttribute<T>(name: string) {
+    const attributeName = this.#attributeNames.get(name.toLowerCase()) ?? name
+    return (
+      (this.#signal.get().Attributes?.[attributeName] as T) ??
+      super.getAttribute(name)
+    )
+  }
+
+  attributeChangedCallback(name: string, oldValue: never, newValue: string) {
+    if (this.#isSettingAttribute) {
+      return
+    }
+    const attributeName = this.getAttributeCaseInsensitive(name)
+
+    if (
+      fastDeepEqual(
+        this.#signal.get().Attributes?.[attributeName],
+        newValue,
+      ) === false
+    ) {
+      this.#signal.set(
+        {
+          ...this.#signal.get(),
+          Attributes: {
+            ...this.#signal.get().Attributes,
+            [attributeName]: newValue,
+          },
+        },
+        { force: true },
+      )
+    }
+  }
+
+  private getAttributeCaseInsensitive(name: string) {
+    const attributeName = this.#attributeNames.get(name.toLowerCase())
+
+    // This should never happen (TM) as we only observe attributes that are defined on the component
+    if (!attributeName) {
+      throw new Error(
+        `Unable to find attribute ${name} on component ${this.#component.name}`,
+      )
+    }
+
+    return attributeName
+  }
+
+  // Debugging purposes
+  get __component() {
+    return this.#component
+  }
+
+  get __ctx() {
+    return this.#ctx
+  }
+
+  get __signal() {
+    return this.#signal
+  }
+}
+
+export const createSignal = ({
+  component,
+  root,
+  toddle,
+  env,
+}: {
+  component: Component
+  root: ShadowRoot
+  toddle: Toddle<LocationSignal, never>
+  env: ToddleEnv
+}) => {
+  return signal<ComponentData>({
+    // Pages are not supported as custom elements, so no need to add location signal
+    Location: undefined,
+    Variables: mapObject(
+      filterObject<Nullable<ComponentVariable>, ComponentVariable>(
+        component.variables ?? {},
+        ([_, variable]) => isDefined(variable),
+      ),
+      ([name, { initialValue }]) => {
+        if (!component) {
+          throw new Error(`Component not found`)
+        }
+        return [
+          name,
+          applyFormula(
+            initialValue,
+            {
+              component: component,
+              root,
+              package: undefined,
+              toddle,
+              env,
+            },
+            undefined,
+          ),
+        ]
+      },
+    ),
+    Attributes: mapObject(component.attributes ?? {}, ([name]) => [
+      name,
+      // TODO: Perhaps we can get it from the DOM already and set initial attributes already?
+      undefined,
+    ]),
+    Apis: mapObject(component.apis ?? {}, ([name]) => [
+      name,
+      { data: null, isLoading: false, error: null },
+    ]),
+  })
+}

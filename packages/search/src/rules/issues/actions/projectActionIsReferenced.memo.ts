@@ -1,0 +1,55 @@
+import type { CustomActionModel } from '@nordcraft/core'
+import { isDefined, ToddleComponent } from '@nordcraft/core'
+import type { ProjectFiles } from '@nordcraft/ssr'
+import type { MemoFn } from '../../../types'
+import { getActionsInComponent } from '../../../util/componentTraversal'
+
+export const projectActionIsReferenced = (
+  files: Omit<ProjectFiles, 'config'> & Partial<Pick<ProjectFiles, 'config'>>,
+  memo: MemoFn,
+) => {
+  const usedActions = memo('all-used-project-actions', () => {
+    const usedActions = new Set<string>()
+    for (const component of Object.values(files.components)) {
+      if (!component) {
+        continue
+      }
+      const c = new ToddleComponent({
+        // Enforce that the component is not undefined since we're iterating
+        component: component,
+        getComponent: (name, packageName) =>
+          packageName
+            ? files.packages?.[packageName]?.components[name]
+            : files.components[name],
+        packageName: undefined,
+        globalFormulas: {
+          formulas: files.formulas,
+          packages: files.packages,
+        },
+      })
+      for (const { action } of getActionsInComponent(memo, c)) {
+        if (
+          action.type === 'Custom' ||
+          action.type === ('function' as any) ||
+          action.type === undefined
+        ) {
+          usedActions.add(
+            [
+              (action as CustomActionModel).package,
+              (action as CustomActionModel).name,
+            ]
+              .filter(isDefined)
+              .join('/'),
+          )
+        }
+      }
+    }
+    return usedActions
+  })
+
+  return (actionName: string, packageName?: string) => {
+    return usedActions.has(
+      [packageName, actionName].filter(isDefined).join('/'),
+    )
+  }
+}

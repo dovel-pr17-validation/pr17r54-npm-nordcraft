@@ -1,0 +1,199 @@
+import type {
+  ComponentData,
+  FormulaContext,
+  PageComponent,
+  PageRoute,
+  RouteDeclaration,
+  ToddleEnv,
+} from '@nordcraft/core'
+import {
+  applyFormula,
+  filterObject,
+  getUrl,
+  isDefined,
+  toBoolean,
+} from '@nordcraft/core'
+import { getParameters } from '../rendering/formulaContext'
+import type { ProjectFiles, Route } from '../ssr.types'
+
+export const matchPageForUrl = <
+  P extends Pick<PageComponent, 'name' | 'route'>,
+>({
+  url,
+  pages,
+}: {
+  url: URL
+  pages: P[]
+}) =>
+  matchRoutes({
+    url,
+    entries: Object.fromEntries(pages.map((p) => [p.name, p])),
+    getRoute: (page) => page.route,
+  })
+
+export const matchRouteForUrl = ({
+  env,
+  req,
+  routes,
+  serverContext,
+  url,
+}: {
+  env: ToddleEnv
+  req: Request
+  routes?: Record<string, Route>
+  serverContext: FormulaContext['toddle']
+  url: URL
+}) => {
+  const enabledRoutes = filterObject(routes ?? {}, ([_name, route]) => {
+    if (!isDefined(route.enabled)) {
+      // If the route does not have an explicit enabled property, we assume it is enabled
+      return true
+    }
+    // Only include routes that are enabled
+    const { formulaContext, data } = getRouteFormulaContext({
+      env,
+      req,
+      route,
+      serverContext,
+    })
+    return toBoolean(applyFormula(route.enabled.formula, formulaContext, data))
+  })
+  return matchRoutes({
+    url,
+    entries: enabledRoutes,
+    getRoute: (route) => route.source,
+  })
+}
+
+export const matchRoutes = <T>({
+  url,
+  entries,
+  getRoute,
+}: {
+  url: URL
+  entries: Record<string, T>
+  getRoute: (entry: T) => Pick<PageRoute, 'path' | 'query'>
+}): { name: string; route: T } | undefined => {
+  const pathSegments = getPathSegments(url)
+  // E.g. /fruit/:fruitId => 1.2
+  // E.g. /:blog/:slug/:author => 2.2.2
+  // E.g. /:dynamic/static => 2.1
+  const getPathHash = (path: PageRoute['path']) =>
+    path.map((segment) => (segment.type === 'static' ? '1' : '2')).join('.')
+  const matches = Object.entries(entries)
+    .filter(([_, entry]) => {
+      const route = getRoute(entry)
+      return (
+        pathSegments.length <= route.path.length &&
+        route.path.every(
+          (segment, index) =>
+            segment.type === 'param' ||
+            segment.optional === true ||
+            segment.name === pathSegments[index],
+        )
+      )
+    })
+    .sort(([_keyA, a], [_keyB, b]) => {
+      const routeAHash = getPathHash(getRoute(a).path)
+      const routeBHash = getPathHash(getRoute(b).path)
+      // Favors static segments over dynamic segments and shorter paths over longer paths
+      // E.g. /fruit/:fruitId wins over /:blog/:slug for /fruit/apple
+      // E.g. /fruit/:fruitId/:category wins over /:blog/:slug for /fruit/apple
+      return routeAHash.localeCompare(routeBHash)
+    })
+  const bestMatch = matches[0]
+  if (!isDefined(bestMatch)) {
+    return
+  }
+  return { name: bestMatch[0], route: bestMatch[1] }
+}
+
+export const getRouteDestination = ({
+  serverContext,
+  req,
+  route,
+  env,
+}: {
+  serverContext: FormulaContext['toddle']
+  req: Request
+  route: Route
+  env: ToddleEnv
+}) => {
+  try {
+    const requestUrl = new URL(req.url)
+
+    const { formulaContext, data } = getRouteFormulaContext({
+      env,
+      req,
+      route,
+      serverContext,
+    })
+
+    const url = getUrl(
+      route.destination,
+      formulaContext,
+      data,
+      requestUrl.origin,
+    )
+    if (
+      route.type === 'redirect' &&
+      requestUrl.origin === url.origin &&
+      requestUrl.pathname === url.pathname
+    ) {
+      // Redirects are not allowed to redirect to the same URL as their source
+      return
+    }
+    return url
+    // eslint-disable-next-line no-empty
+  } catch {}
+}
+
+const getRouteFormulaContext = ({
+  env,
+  req,
+  route,
+  serverContext,
+}: {
+  env: ToddleEnv
+  req: Request
+  route: Route
+  serverContext: FormulaContext['toddle']
+}) => {
+  const { searchParamsWithDefaults, pathParams } = getParameters({
+    route: route.source,
+    req,
+  })
+  const data: ComponentData = {
+    'Route parameters': {
+      path: pathParams ?? {},
+      query: searchParamsWithDefaults,
+    },
+  }
+  const formulaContext: FormulaContext = {
+    component: undefined,
+    env,
+    package: undefined,
+    toddle: serverContext,
+  }
+  return {
+    formulaContext,
+    data,
+  }
+}
+
+export const get404Page = (components: ProjectFiles['components']) =>
+  getPages(components).find((page) => page.name === '404')
+
+const getPages = (
+  components: Partial<Record<string, { route?: RouteDeclaration | null }>>,
+) =>
+  Object.values(components).filter((c): c is PageComponent =>
+    isDefined(c!.route),
+  )
+
+export const getPathSegments = (url: URL) =>
+  url.pathname
+    .substring(1)
+    .split('/')
+    .filter((s) => s !== '')
+    .map((s) => decodeURIComponent(s))

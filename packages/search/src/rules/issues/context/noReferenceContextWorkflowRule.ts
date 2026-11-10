@@ -1,0 +1,87 @@
+import { ToddleComponent } from '@nordcraft/core'
+import type { ComponentContext, IssueRule } from '../../../types'
+import { getActionsInComponent } from '../../../util/componentTraversal'
+import { removeContextWorkflowSubscription } from './noReferenceContextWorkflowRule.fix'
+
+/**
+ * Rule for checking if a component's context workflow is used anywhere in the component.
+ */
+export const noReferenceContextWorkflowRule: IssueRule<
+  {
+    providerName: string
+    workflowName: string
+  },
+  ComponentContext
+> = {
+  code: 'no-reference context workflow',
+  level: 'warning',
+  category: 'No References',
+  nodeTypes: 'component-context',
+  visit: (report, { path, files, value, memo }) => {
+    if (Object.keys(value.workflows).length === 0) {
+      return
+    }
+
+    const [_fileType, componentName, _contexts, contextComponentName] =
+      path as string[]
+    const componentFile = files.components[componentName]
+    if (!componentFile) {
+      return
+    }
+
+    const usedContextWorkflows = memo(
+      `${componentName}-used-context-workflows`,
+      () => {
+        const component = new ToddleComponent<string>({
+          component: componentFile,
+          packageName: undefined,
+          getComponent: (name) => files.components[name],
+          globalFormulas: {
+            formulas: files.formulas,
+            packages: files.packages,
+          },
+        })
+        const used = new Set<string>()
+        for (const { action } of getActionsInComponent(memo, component)) {
+          if (
+            action.type === 'TriggerWorkflow' &&
+            typeof action.contextProvider === 'string' &&
+            typeof action.workflow === 'string'
+          ) {
+            // Store as "providerName/workflowName"
+            used.add(`${action.contextProvider}/${action.workflow}`)
+          }
+        }
+        return used
+      },
+    )
+
+    value.workflows.forEach((workflowName) => {
+      if (
+        !usedContextWorkflows.has(`${contextComponentName}/${workflowName}`)
+      ) {
+        const workflowDisplayName =
+          files.components[contextComponentName]?.workflows?.[workflowName]
+            ?.name ?? workflowName
+        report({
+          path,
+          info: {
+            title: 'Unused context workflow',
+            description: `Context workflow **${workflowDisplayName}** from **${contextComponentName}** is not used in this component.`,
+          },
+          details: {
+            providerName: contextComponentName,
+            workflowName,
+          },
+          fixes: ['remove-context-workflow-subscription'],
+        })
+      }
+    })
+  },
+  fixes: {
+    'remove-context-workflow-subscription': removeContextWorkflowSubscription,
+  },
+}
+
+export type NoReferenceContextWorkflowRuleFix =
+  'remove-context-workflow-subscription'

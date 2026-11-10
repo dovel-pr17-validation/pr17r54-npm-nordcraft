@@ -1,0 +1,456 @@
+import type {
+  ComponentAPI,
+  ComponentData,
+  ComponentFormula,
+  ComponentNodeModel,
+  ComponentVariable,
+  FormulaContext,
+  Nullable,
+  SupportedNamespaces,
+} from '@nordcraft/core'
+import {
+  appendUnit,
+  applyFormula,
+  filterObject,
+  getNodeSelector,
+  isDefined,
+  isLegacyApi,
+  mapObject,
+  slotBasePath,
+} from '@nordcraft/core'
+import '@nordcraft/core/compileTime'
+import { isContextApiV2 } from '../api/apiUtils'
+import { createLegacyAPI } from '../api/createAPI'
+import { createAPI } from '../api/createAPIv2'
+import { sortApis } from '../api/sortApis'
+import { isContextProvider } from '../context/isContextProvider'
+import { subscribeToContext } from '../context/subscribeToContext'
+import { registerComponentToLogState } from '../debug/logState'
+import { handleAction } from '../events/handleAction'
+import type { Signal } from '../signal/signal'
+import { signal } from '../signal/signal'
+import type { ComponentChild, ComponentContext, ContextApi } from '../types'
+import { createFormulaCache } from '../utils/createFormulaCache'
+import { formulaHasValue } from '../utils/formulaHasValue'
+import { getComponent } from '../utils/getComponent'
+import { subscribeCustomProperty } from '../utils/subscribeCustomProperty'
+import type { HydrationState } from './hydration'
+import { renderComponent } from './renderComponent'
+
+export type RenderComponentNodeProps = {
+  path: string
+  node: ComponentNodeModel
+  dataSignal: Signal<ComponentData>
+  ctx: ComponentContext
+  parentElement: Element | ShadowRoot
+  instance: Record<string, string>
+  namespace?: SupportedNamespaces
+  slotRepeatIndex?: number
+  slotSuffix?: string
+  hydration?: HydrationState
+}
+
+export function createComponent({
+  node,
+  path,
+  dataSignal,
+  ctx,
+  parentElement,
+  instance,
+  namespace,
+  slotRepeatIndex,
+  slotSuffix,
+  hydration,
+}: RenderComponentNodeProps): ReadonlyArray<Element | Text> {
+  const nodeLookupKey = ctx.package ? `${ctx.package}/${node.name}` : node.name
+  const component = getComponent(nodeLookupKey, ctx.components, !IS_PREVIEW)
+  if (!component) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `Could not find component "${nodeLookupKey}" for component "${
+        ctx.component.name
+      }". Available components are: ["${ctx.components
+        .map((c) => c.name)
+        .join('", "')}"]`,
+    )
+    return []
+  }
+  const formulaCtx =
+    IS_PREVIEW && (ctx.reportFormulaEvaluation || ctx.jsonPath)
+      ? {
+          component: ctx.component,
+          formulaCache: ctx.formulaCache,
+          root: ctx.root,
+          package: ctx.package,
+          toddle: ctx.toddle,
+          env: ctx.env,
+          reportFormulaEvaluation: ctx.reportFormulaEvaluation,
+        }
+      : ctx
+  const attributesSignal = dataSignal.map((data) => {
+    const attrs = node.attrs ?? {}
+    const result: Record<string, unknown> = {}
+    for (const attr in attrs) {
+      const value = attrs[attr]
+      result[attr] =
+        value?.type !== 'value'
+          ? applyFormula(
+              value,
+              formulaCtx,
+              data,
+              IS_PREVIEW && ctx.reportFormulaEvaluation
+                ? ['attrs', attr]
+                : undefined,
+            )
+          : value?.value
+    }
+    return result
+  })
+
+  const formulaCache = createFormulaCache(component)
+  const apiFormulaCtx: FormulaContext = {
+    ...formulaCtx,
+    component,
+    formulaCache,
+  }
+  const componentDataSignal = signal<ComponentData>({
+    Location: dataSignal.get().Location,
+    Attributes: attributesSignal.get(),
+    Apis: mapObject(
+      filterObject(component.apis ?? {}, ([_, api]) => isDefined(api)),
+      ([name, api]) => [
+        name,
+        {
+          data: null,
+          isLoading:
+            api!.autoFetch &&
+            applyFormula(
+              api!.autoFetch,
+              apiFormulaCtx,
+              dataSignal.get(),
+              IS_PREVIEW ? ['apis', name, 'autoFetch'] : undefined,
+            )
+              ? true
+              : false,
+          error: null,
+        },
+      ],
+    ),
+  })
+
+  // Subscribe to global stores (currently only theme)
+  // We subscribe before calculating variable initial values to ensure they can reference global store values
+  ctx.stores.theme.subscribe((newTheme) => {
+    if (componentDataSignal.get().Page?.Theme !== newTheme) {
+      componentDataSignal.update(
+        (data) => ({
+          ...data,
+          Page: {
+            ...data.Page,
+            Theme: newTheme,
+          },
+        }),
+        { force: true },
+      )
+    }
+  })
+
+  // Subscribe context before calculating variable initial values to ensure they can reference context values
+  subscribeToContext(componentDataSignal, component, ctx)
+  componentDataSignal.update((data) => ({
+    ...data,
+    Variables: mapObject(
+      filterObject<Nullable<ComponentVariable>, ComponentVariable>(
+        component.variables ?? {},
+        ([_, variable]) => isDefined(variable),
+      ),
+      ([name, variable]) => [
+        name,
+        applyFormula(
+          variable.initialValue,
+          apiFormulaCtx,
+          componentDataSignal.get(),
+          IS_PREVIEW ? ['variables', name] : undefined,
+        ),
+      ],
+    ),
+  }))
+  registerComponentToLogState(component, componentDataSignal)
+
+  // Call the abort signal if the component's datasignal is destroyed (component unmounted) to cancel any pending requests
+  const abortController = new AbortController()
+  componentDataSignal.subscriptions.push(() =>
+    abortController.abort(`Component ${component.name} unmounted`),
+  )
+  if (IS_PREVIEW && ctx.reportFormulaEvaluation) {
+    componentDataSignal.subscribe((data) => {
+      const vars = data.Variables
+      if (vars) {
+        for (const name in vars) {
+          ctx.reportFormulaEvaluation?.(['variables', name], vars[name], ctx)
+        }
+      }
+    })
+  }
+
+  // Note: this function must run procedurally to ensure apis (which are in correct order) can reference each other
+  const apis: Record<string, ContextApi> = {}
+  const componentApis = component.apis
+  if (componentApis) {
+    let hasApis = false
+    for (const key in componentApis) {
+      if (isDefined(componentApis[key])) {
+        hasApis = true
+        break
+      }
+    }
+    if (hasApis) {
+      sortApis(
+        Object.entries(componentApis).filter(
+          (entry): entry is [string, ComponentAPI] => isDefined(entry[1]),
+        ),
+      ).forEach(([name, api]) => {
+        if (isLegacyApi(api)) {
+          apis[name] = createLegacyAPI(api, {
+            ...ctx,
+            apis,
+            component,
+            dataSignal: componentDataSignal,
+            abortSignal: abortController.signal,
+            isRootComponent: false,
+            formulaCache,
+            package: node.package ?? ctx.package,
+            triggerEvent: (eventTrigger, data) => {
+              const eventHandler = Object.values(node.events ?? {}).find(
+                (e) => e?.trigger === eventTrigger,
+              )
+              if (eventHandler) {
+                eventHandler.actions?.forEach((action) =>
+                  handleAction(
+                    action,
+                    { ...dataSignal.get(), Event: data },
+                    ctx,
+                  ),
+                )
+              }
+            },
+          })
+        } else {
+          apis[name] = createAPI({
+            apiRequest: api,
+            ctx: {
+              ...ctx,
+              apis,
+              component,
+              dataSignal: componentDataSignal,
+              abortSignal: abortController.signal,
+              isRootComponent: false,
+              formulaCache,
+              package: node.package ?? ctx.package,
+              triggerEvent: (eventTrigger, data) => {
+                const eventHandler = Object.values(node.events ?? {}).find(
+                  (e) => e?.trigger === eventTrigger,
+                )
+                if (eventHandler) {
+                  eventHandler.actions?.forEach((action) =>
+                    handleAction(
+                      action,
+                      { ...dataSignal.get(), Event: data },
+                      ctx,
+                    ),
+                  )
+                }
+              },
+            },
+            componentData: componentDataSignal.get(),
+          })
+        }
+      })
+    }
+  }
+  Object.values(apis)
+    .filter(isContextApiV2)
+    .forEach((api) => {
+      api.triggerActions(componentDataSignal.get())
+    })
+
+  const onEvent = (eventTrigger: string, data: any) => {
+    const eventHandler = Object.values(node.events ?? {}).find(
+      (e) => e?.trigger === eventTrigger,
+    )
+    if (eventHandler) {
+      eventHandler.actions?.forEach((action) =>
+        handleAction(action, { ...dataSignal.get(), Event: data }, ctx),
+      )
+    }
+  }
+
+  let providers = ctx.providers
+  if (isContextProvider(component)) {
+    // Subscribe to exposed formulas and update the component's data signal
+    const providerFormulaCtx: FormulaContext =
+      IS_PREVIEW && (ctx.reportFormulaEvaluation || ctx.jsonPath)
+        ? {
+            ...apiFormulaCtx,
+            jsonPath: ctx.jsonPath,
+            reportFormulaEvaluation: ctx.reportFormulaEvaluation,
+          }
+        : apiFormulaCtx
+    const formulaDataSignals = Object.fromEntries(
+      Object.entries(component.formulas ?? {})
+        .filter(([, formula]) => formula?.exposeInContext)
+        .map(([name, formula]) => [
+          name,
+          componentDataSignal.map((data) =>
+            applyFormula(
+              (formula as ComponentFormula).formula,
+              providerFormulaCtx,
+              data,
+              IS_PREVIEW ? ['formulas', name] : undefined,
+            ),
+          ),
+        ]),
+    )
+
+    providers = {
+      ...providers,
+      [component.name]: {
+        component,
+        formulaDataSignals,
+        ctx: {
+          ...ctx,
+          apis,
+          component,
+          dataSignal: componentDataSignal,
+          abortSignal: abortController.signal,
+          triggerEvent: onEvent,
+        },
+      },
+    }
+  }
+
+  const children: Record<string, Array<ComponentChild>> = {}
+  for (let i = 0; i < (node?.children ?? []).length; i++) {
+    const childId = node.children?.[i]
+    if (childId === undefined) {
+      continue
+    }
+    const childNode = ctx.component.nodes?.[childId]
+    const slotName = childNode?.slot ?? 'default'
+    children[slotName] = children[slotName] ?? []
+    children[slotName].push({
+      id: childId,
+      path: slotBasePath(path, i, slotName),
+      dataSignal,
+      ctx: {
+        ...ctx,
+        package: node.package ?? ctx.package,
+      },
+    })
+  }
+
+  attributesSignal.subscribe(
+    (Attributes) =>
+      componentDataSignal.update(
+        (data) => ({
+          ...data,
+          Attributes,
+        }),
+        { force: true },
+      ),
+    { destroy: () => componentDataSignal.destroy() },
+  )
+
+  const renderedComponent = renderComponent({
+    dataSignal: componentDataSignal,
+    component,
+    components: ctx.components,
+    path,
+    root: ctx.root,
+    isRootComponent: false,
+    children,
+    formulaCache,
+    providers,
+    stores: ctx.stores,
+    apis,
+    abortSignal: abortController.signal,
+    package: node.package ?? ctx.package,
+    parentElement,
+    onEvent,
+    toddle: ctx.toddle,
+    env: ctx.env,
+    namespace,
+    hydration,
+    // If the root node is another component, then append and forward previous instance
+    instance:
+      node.id === 'root'
+        ? { ...instance, [ctx.component.name]: 'root' }
+        : { [ctx.component.name]: node.id ?? '' },
+    ...(IS_PREVIEW
+      ? {
+          jsonPath: ctx.jsonPath,
+          reportFormulaEvaluation: ctx.reportFormulaEvaluation,
+        }
+      : {}),
+    slotRepeatIndex,
+    slotSuffix,
+  })
+
+  // Custom properties instance overrides are added after the child tree is rendered to ensure correct order
+  Object.entries(node.customProperties ?? {})
+    .filter(([_, { formula }]) => formulaHasValue(formula))
+    .forEach(([customPropertyName, customProperty]) =>
+      subscribeCustomProperty({
+        selector: getNodeSelector(path, {
+          componentName: ctx.component.name,
+          nodeId: node.id,
+        }),
+        signal: dataSignal.map((data) =>
+          appendUnit(
+            applyFormula(
+              customProperty.formula,
+              formulaCtx,
+              data,
+              IS_PREVIEW
+                ? ['customProperties', customPropertyName, 'formula']
+                : undefined,
+            ),
+            customProperty.unit,
+          ),
+        ),
+        customPropertyName,
+        root: ctx.root,
+      }),
+    )
+  node.variants?.forEach((variant) => {
+    Object.entries(variant.customProperties ?? {})
+      .filter(([_, { formula }]) => formulaHasValue(formula))
+      .forEach(([customPropertyName, customProperty]) =>
+        subscribeCustomProperty({
+          selector: getNodeSelector(path, {
+            componentName: ctx.component.name,
+            nodeId: node.id,
+            variant,
+          }),
+          signal: dataSignal.map((data) =>
+            appendUnit(
+              applyFormula(
+                customProperty.formula,
+                formulaCtx,
+                data,
+                IS_PREVIEW
+                  ? ['customProperties', customPropertyName, 'formula']
+                  : undefined,
+              ),
+              customProperty.unit,
+            ),
+          ),
+          customPropertyName,
+          variant,
+          root: ctx.root,
+        }),
+      )
+  })
+
+  return renderedComponent
+}

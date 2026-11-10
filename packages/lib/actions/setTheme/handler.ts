@@ -1,0 +1,34 @@
+import { THEME_COOKIE_NAME, type ActionHandler } from '@nordcraft/core'
+
+const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365
+
+const handler: ActionHandler = async function ([name], ctx) {
+  if (typeof name !== 'string' && name !== null) {
+    ctx.triggerActionEvent(
+      'Error',
+      new Error('The "Name" argument must be a string or null'),
+    )
+    return
+  }
+
+  const shouldDelete = name === null || name === ''
+  try {
+    // Note that the cookie store API is used with event listeners to update
+    // the theme signal for reactive updates.
+    await cookieStore.set({
+      name: THEME_COOKIE_NAME,
+      value: name ?? '',
+      path: '/',
+      expires: shouldDelete ? 0 : Date.now() + ONE_YEAR_MS,
+      sameSite: 'none',
+    })
+    ctx.triggerActionEvent('Success', undefined)
+  } catch (error) {
+    ctx.triggerActionEvent('Error', error as Error)
+  } finally {
+    // Also update the theme store directly for cases where cookies are not supported or delayed.
+    ctx.stores?.theme.set(name)
+  }
+}
+
+export default handler

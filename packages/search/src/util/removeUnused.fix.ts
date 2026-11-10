@@ -1,0 +1,41 @@
+import type { NodeModel } from '@nordcraft/core'
+import { get } from '@nordcraft/core'
+import type { FixFunction, NodeType } from '../types'
+
+export const removeFromPathFix: FixFunction<NodeType> = ({
+  data: { path },
+}) => ({ path, delete: true })
+
+/**
+ * Same as removeFromPathFix, but also cleans up any references to the removed node.
+ */
+export const removeNodeFromPathFix: FixFunction<NodeType> = ({ data }) => {
+  const nodeId = String(data.path[data.path.length - 1])
+  const componentNodesPath = data.path.slice(0, -1).map(String)
+  const nodes = structuredClone(get(data.files, componentNodesPath)) as Partial<
+    Record<string, NodeModel | null>
+  >
+
+  // Clean parent reference
+  for (const key in nodes) {
+    const node = nodes[key]
+    if (node?.children?.includes(nodeId)) {
+      node.children = node.children.filter((p) => p !== nodeId)
+    }
+  }
+
+  // Clean children recursively
+  const removeNodeAndChildren = (nodeId: string) => {
+    const node = nodes[nodeId] as NodeModel | undefined
+    if (node?.children) {
+      for (const childId of node.children) {
+        removeNodeAndChildren(childId)
+      }
+    }
+    delete nodes[nodeId]
+  }
+
+  removeNodeAndChildren(nodeId)
+
+  return { path: componentNodesPath, value: nodes }
+}

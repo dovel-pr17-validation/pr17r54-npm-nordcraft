@@ -1,0 +1,1889 @@
+{
+  "id": "bench-project-001",
+  "name": "benchmark",
+  "project": {
+    "id": "proj-bench-001",
+    "name": "Benchmark Project",
+    "type": "app",
+    "emoji": "⚡",
+    "short_id": "bench_test_app",
+    "accounts": {
+      "id": "bench-org",
+      "name": "bench-org",
+      "account_plans": {
+        "plans": {
+          "custom_domains": false
+        },
+        "active": true
+      }
+    },
+    "thumbnail": null,
+    "description": null,
+    "published_at": null,
+    "custom_domains": false
+  },
+  "commit": "bench-commit-head",
+  "files": {
+    "components": {
+      "HomePage": {
+        "name": "HomePage",
+        "apis": {},
+        "variables": {
+          "items": {
+            "initialValue": {
+              "type": "value",
+              "value": []
+            }
+          }
+        },
+        "nodes": {
+          "root": {
+            "tag": "div",
+            "type": "element",
+            "attrs": {},
+            "style": {
+              "gap": "8px",
+              "color": "var(--grey-200, #E5E5E5)",
+              "min-height": "100%",
+              "align-items": "center",
+              "justify-content": "center",
+              "background-color": "var(--grey-900)"
+            },
+            "events": {},
+            "classes": {},
+            "children": [
+              "title-node",
+              "counter-comp-node",
+              "repeat-list-node",
+              "btn-populate-list",
+              "btn-clear-list"
+            ],
+            "styleVariables": {}
+          },
+          "title-node": {
+            "tag": "h1",
+            "type": "element",
+            "attrs": {},
+            "style": {
+              "color": "var(--grey-200, #E5E5E5)",
+              "font-size": "2.25rem",
+              "font-weight": "var(--font-weight-bold)"
+            },
+            "events": {},
+            "classes": {},
+            "children": [
+              "title-text"
+            ],
+            "styleVariables": {}
+          },
+          "title-text": {
+            "type": "text",
+            "value": {
+              "type": "value",
+              "value": "Nordcraft Runtime Benchmark"
+            }
+          },
+          "counter-comp-node": {
+            "type": "component",
+            "name": "counter",
+            "attrs": {},
+            "events": {},
+            "children": [],
+            "repeat": null
+          },
+          "repeat-list-node": {
+            "tag": "ul",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "benchmark-list"
+              }
+            },
+            "style": {
+              "display": "flex",
+              "flex-direction": "column",
+              "gap": "4px",
+              "max-height": "300px",
+              "overflow": "auto"
+            },
+            "events": {},
+            "classes": {},
+            "children": [
+              "repeat-item-node"
+            ],
+            "styleVariables": {}
+          },
+          "repeat-item-node": {
+            "tag": "li",
+            "type": "element",
+            "repeat": {
+              "type": "path",
+              "path": [
+                "Variables",
+                "items"
+              ]
+            },
+            "repeatKey": {
+              "type": "path",
+              "path": [
+                "ListItem",
+                "Item",
+                "id"
+              ]
+            },
+            "attrs": {},
+            "events": {},
+            "classes": {},
+            "children": [
+              "repeat-item-text"
+            ],
+            "style": {
+              "padding": "4px 8px",
+              "border": "1px solid var(--grey-700)"
+            },
+            "styleVariables": {}
+          },
+          "repeat-item-text": {
+            "type": "text",
+            "value": {
+              "type": "path",
+              "path": [
+                "ListItem",
+                "Item",
+                "title"
+              ]
+            }
+          },
+          "btn-populate-list": {
+            "tag": "button",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "btn-populate-list"
+              }
+            },
+            "style": {
+              "display": "none"
+            },
+            "events": {
+              "click": {
+                "trigger": "click",
+                "actions": [
+                  {
+                    "type": "SetVariable",
+                    "variable": "items",
+                    "data": {
+                      "type": "function",
+                      "name": "@toddle/map",
+                      "arguments": [
+                        {
+                          "name": "Array",
+                          "formula": {
+                            "type": "function",
+                            "name": "@toddle/range",
+                            "arguments": [
+                              {
+                                "name": "Min",
+                                "formula": {
+                                  "type": "value",
+                                  "value": 0
+                                },
+                                "type": {
+                                  "type": "Number"
+                                }
+                              },
+                              {
+                                "name": "Max",
+                                "formula": {
+                                  "type": "value",
+                                  "value": 199
+                                },
+                                "type": {
+                                  "type": "Number"
+                                }
+                              }
+                            ],
+                            "display_name": "Range"
+                          },
+                          "type": {
+                            "type": "Array"
+                          }
+                        },
+                        {
+                          "name": "Formula",
+                          "isFunction": true,
+                          "formula": {
+                            "type": "object",
+                            "arguments": [
+                              {
+                                "name": "id",
+                                "formula": {
+                                  "type": "function",
+                                  "name": "@toddle/concatenate",
+                                  "arguments": [
+                                    {
+                                      "name": "0",
+                                      "formula": {
+                                        "type": "value",
+                                        "value": "item-"
+                                      }
+                                    },
+                                    {
+                                      "name": "0",
+                                      "formula": {
+                                        "type": "path",
+                                        "path": [
+                                          "Args",
+                                          "item"
+                                        ]
+                                      }
+                                    }
+                                  ],
+                                  "variableArguments": true,
+                                  "display_name": "Concatenate"
+                                }
+                              },
+                              {
+                                "name": "title",
+                                "formula": {
+                                  "type": "function",
+                                  "name": "@toddle/concatenate",
+                                  "arguments": [
+                                    {
+                                      "name": "0",
+                                      "formula": {
+                                        "type": "value",
+                                        "value": "Item "
+                                      }
+                                    },
+                                    {
+                                      "name": "0",
+                                      "formula": {
+                                        "type": "path",
+                                        "path": [
+                                          "Args",
+                                          "item"
+                                        ]
+                                      }
+                                    }
+                                  ],
+                                  "variableArguments": true,
+                                  "display_name": "Concatenate"
+                                }
+                              }
+                            ]
+                          },
+                          "type": {
+                            "type": "Formula"
+                          }
+                        }
+                      ],
+                      "variableArguments": true,
+                      "display_name": "Map"
+                    }
+                  }
+                ]
+              }
+            },
+            "classes": {},
+            "children": [],
+            "styleVariables": {}
+          },
+          "btn-clear-list": {
+            "tag": "button",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "btn-clear-list"
+              }
+            },
+            "style": {
+              "display": "none"
+            },
+            "events": {
+              "click": {
+                "trigger": "click",
+                "actions": [
+                  {
+                    "type": "SetVariable",
+                    "variable": "items",
+                    "data": {
+                      "type": "value",
+                      "value": []
+                    }
+                  }
+                ]
+              }
+            },
+            "classes": {},
+            "children": [],
+            "styleVariables": {}
+          }
+        },
+        "route": {
+          "info": {
+            "title": {
+              "formula": {
+                "type": "value",
+                "value": "Benchmark"
+              }
+            },
+            "description": {
+              "formula": {
+                "type": "value",
+                "value": "Runtime Performance Benchmark"
+              }
+            }
+          },
+          "path": [],
+          "query": {}
+        },
+        "events": [],
+        "onLoad": null,
+        "functions": {},
+        "attributes": {}
+      },
+      "ShufflePage": {
+        "name": "ShufflePage",
+        "apis": {},
+        "variables": {
+          "items": {
+            "initialValue": {
+              "type": "function",
+              "name": "@toddle/map",
+              "arguments": [
+                {
+                  "name": "Array",
+                  "formula": {
+                    "type": "function",
+                    "name": "@toddle/range",
+                    "arguments": [
+                      {
+                        "name": "Min",
+                        "formula": {
+                          "type": "value",
+                          "value": 0
+                        },
+                        "type": {
+                          "type": "Number"
+                        }
+                      },
+                      {
+                        "name": "Max",
+                        "formula": {
+                          "type": "value",
+                          "value": 199
+                        },
+                        "type": {
+                          "type": "Number"
+                        }
+                      }
+                    ],
+                    "display_name": "Range"
+                  },
+                  "type": {
+                    "type": "Array"
+                  }
+                },
+                {
+                  "name": "Formula",
+                  "isFunction": true,
+                  "formula": {
+                    "type": "object",
+                    "arguments": [
+                      {
+                        "name": "id",
+                        "formula": {
+                          "type": "function",
+                          "name": "@toddle/concatenate",
+                          "arguments": [
+                            {
+                              "name": "0",
+                              "formula": {
+                                "type": "value",
+                                "value": "item-"
+                              }
+                            },
+                            {
+                              "name": "0",
+                              "formula": {
+                                "type": "path",
+                                "path": [
+                                  "Args",
+                                  "item"
+                                ]
+                              }
+                            }
+                          ],
+                          "variableArguments": true,
+                          "display_name": "Concatenate"
+                        }
+                      },
+                      {
+                        "name": "title",
+                        "formula": {
+                          "type": "function",
+                          "name": "@toddle/concatenate",
+                          "arguments": [
+                            {
+                              "name": "0",
+                              "formula": {
+                                "type": "value",
+                                "value": "Item "
+                              }
+                            },
+                            {
+                              "name": "0",
+                              "formula": {
+                                "type": "path",
+                                "path": [
+                                  "Args",
+                                  "item"
+                                ]
+                              }
+                            }
+                          ],
+                          "variableArguments": true,
+                          "display_name": "Concatenate"
+                        }
+                      },
+                      {
+                        "name": "colA",
+                        "formula": {
+                          "type": "function",
+                          "name": "@toddle/modulo",
+                          "arguments": [
+                            {
+                              "name": "Dividend",
+                              "formula": {
+                                "type": "function",
+                                "name": "@toddle/multiply",
+                                "arguments": [
+                                  {
+                                    "name": "0",
+                                    "formula": {
+                                      "type": "path",
+                                      "path": [
+                                        "Args",
+                                        "item"
+                                      ]
+                                    },
+                                    "type": {
+                                      "type": "Number"
+                                    }
+                                  },
+                                  {
+                                    "name": "1",
+                                    "formula": {
+                                      "type": "value",
+                                      "value": 7
+                                    },
+                                    "type": {
+                                      "type": "Number"
+                                    }
+                                  }
+                                ],
+                                "variableArguments": true,
+                                "display_name": "Multiply"
+                              },
+                              "type": {
+                                "type": "Number"
+                              }
+                            },
+                            {
+                              "name": "Divider",
+                              "formula": {
+                                "type": "value",
+                                "value": 200
+                              },
+                              "type": {
+                                "type": "Number"
+                              }
+                            }
+                          ],
+                          "display_name": "Modulo"
+                        }
+                      },
+                      {
+                        "name": "colB",
+                        "formula": {
+                          "type": "function",
+                          "name": "@toddle/modulo",
+                          "arguments": [
+                            {
+                              "name": "Dividend",
+                              "formula": {
+                                "type": "function",
+                                "name": "@toddle/multiply",
+                                "arguments": [
+                                  {
+                                    "name": "0",
+                                    "formula": {
+                                      "type": "path",
+                                      "path": [
+                                        "Args",
+                                        "item"
+                                      ]
+                                    },
+                                    "type": {
+                                      "type": "Number"
+                                    }
+                                  },
+                                  {
+                                    "name": "1",
+                                    "formula": {
+                                      "type": "value",
+                                      "value": 3
+                                    },
+                                    "type": {
+                                      "type": "Number"
+                                    }
+                                  }
+                                ],
+                                "variableArguments": true,
+                                "display_name": "Multiply"
+                              },
+                              "type": {
+                                "type": "Number"
+                              }
+                            },
+                            {
+                              "name": "Divider",
+                              "formula": {
+                                "type": "value",
+                                "value": 200
+                              },
+                              "type": {
+                                "type": "Number"
+                              }
+                            }
+                          ],
+                          "display_name": "Modulo"
+                        }
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "Formula"
+                  }
+                }
+              ],
+              "variableArguments": true,
+              "display_name": "Map"
+            }
+          },
+          "sortByColA": {
+            "initialValue": {
+              "type": "value",
+              "value": true
+            }
+          }
+        },
+        "nodes": {
+          "root": {
+            "tag": "div",
+            "type": "element",
+            "attrs": {},
+            "style": {
+              "gap": "8px",
+              "color": "var(--grey-200, #E5E5E5)",
+              "min-height": "100%",
+              "align-items": "center",
+              "justify-content": "center",
+              "background-color": "var(--grey-900)",
+              "flex-direction": "column"
+            },
+            "events": {},
+            "classes": {},
+            "children": [
+              "shuffle-list-node",
+              "btn-sort-list"
+            ],
+            "styleVariables": {}
+          },
+          "shuffle-list-node": {
+            "tag": "ul",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "benchmark-shuffle-list"
+              }
+            },
+            "style": {
+              "display": "flex",
+              "flex-direction": "column",
+              "gap": "4px",
+              "max-height": "400px",
+              "overflow": "auto",
+              "padding": "0"
+            },
+            "events": {},
+            "classes": {},
+            "children": [
+              "shuffle-repeat-node"
+            ],
+            "styleVariables": {}
+          },
+          "shuffle-repeat-node": {
+            "tag": "li",
+            "type": "element",
+            "repeat": {
+              "type": "path",
+              "path": [
+                "Variables",
+                "items"
+              ]
+            },
+            "repeatKey": {
+              "type": "path",
+              "path": [
+                "ListItem",
+                "Item",
+                "id"
+              ]
+            },
+            "attrs": {
+              "data-id": {
+                "type": "path",
+                "path": [
+                  "ListItem",
+                  "Item",
+                  "id"
+                ]
+              },
+              "data-col-a": {
+                "type": "path",
+                "path": [
+                  "ListItem",
+                  "Item",
+                  "colA"
+                ]
+              },
+              "data-col-b": {
+                "type": "path",
+                "path": [
+                  "ListItem",
+                  "Item",
+                  "colB"
+                ]
+              }
+            },
+            "events": {},
+            "classes": {},
+            "children": [
+              "shuffle-repeat-text"
+            ],
+            "style": {
+              "padding": "4px 8px",
+              "border": "1px solid var(--grey-700)",
+              "list-style": "none"
+            },
+            "styleVariables": {}
+          },
+          "shuffle-repeat-text": {
+            "type": "text",
+            "value": {
+              "type": "path",
+              "path": [
+                "ListItem",
+                "Item",
+                "title"
+              ]
+            }
+          },
+          "btn-sort-list": {
+            "tag": "button",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "btn-sort-list"
+              }
+            },
+            "style": {
+              "display": "none"
+            },
+            "events": {
+              "click": {
+                "trigger": "click",
+                "actions": [
+                  {
+                    "type": "SetVariable",
+                    "variable": "items",
+                    "data": {
+                      "type": "function",
+                      "name": "@toddle/sort_by",
+                      "arguments": [
+                        {
+                          "name": "Array",
+                          "formula": {
+                            "type": "path",
+                            "path": [
+                              "Variables",
+                              "items"
+                            ]
+                          },
+                          "type": {
+                            "type": "Array"
+                          }
+                        },
+                        {
+                          "name": "Formula",
+                          "isFunction": true,
+                          "formula": {
+                            "type": "switch",
+                            "cases": [
+                              {
+                                "condition": {
+                                  "type": "path",
+                                  "path": [
+                                    "Variables",
+                                    "sortByColA"
+                                  ]
+                                },
+                                "formula": {
+                                  "type": "path",
+                                  "path": [
+                                    "Args",
+                                    "item",
+                                    "colA"
+                                  ]
+                                }
+                              }
+                            ],
+                            "default": {
+                              "type": "path",
+                              "path": [
+                                "Args",
+                                "item",
+                                "colB"
+                              ]
+                            }
+                          },
+                          "type": {
+                            "type": "Formula"
+                          }
+                        },
+                        {
+                          "name": "Ascending?",
+                          "formula": {
+                            "type": "value",
+                            "value": true
+                          },
+                          "type": {
+                            "type": "Boolean"
+                          }
+                        }
+                      ],
+                      "display_name": "Sort by"
+                    }
+                  },
+                  {
+                    "type": "SetVariable",
+                    "variable": "sortByColA",
+                    "data": {
+                      "type": "function",
+                      "name": "@toddle/not",
+                      "arguments": [
+                        {
+                          "name": "Input",
+                          "formula": {
+                            "type": "path",
+                            "path": [
+                              "Variables",
+                              "sortByColA"
+                            ]
+                          },
+                          "type": {
+                            "type": "Boolean"
+                          }
+                        }
+                      ],
+                      "display_name": "Not"
+                    }
+                  }
+                ]
+              }
+            },
+            "classes": {},
+            "children": [],
+            "styleVariables": {}
+          }
+        },
+        "route": {
+          "info": {
+            "title": {
+              "formula": {
+                "type": "value",
+                "value": "Benchmark"
+              }
+            },
+            "description": {
+              "formula": {
+                "type": "value",
+                "value": "Runtime Performance Benchmark - Repeat List Shuffle"
+              }
+            }
+          },
+          "path": [],
+          "query": {}
+        },
+        "events": [],
+        "onLoad": null,
+        "functions": {},
+        "attributes": {}
+      },
+      "counter": {
+        "name": "counter",
+        "apis": {},
+        "attributes": {},
+        "onLoad": null,
+        "events": [],
+        "formulas": {},
+        "variables": {
+          "count": {
+            "initialValue": {
+              "type": "function",
+              "name": "@toddle/number",
+              "arguments": [
+                {
+                  "name": "Input",
+                  "formula": {
+                    "type": "value",
+                    "value": 0
+                  },
+                  "type": {
+                    "type": "Any"
+                  }
+                }
+              ],
+              "display_name": "Number"
+            }
+          }
+        },
+        "nodes": {
+          "root": {
+            "type": "element",
+            "tag": "div",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "counter-root"
+              }
+            },
+            "classes": {},
+            "events": {},
+            "children": [
+              "btn-dec",
+              "count-display",
+              "btn-inc"
+            ],
+            "style": {
+              "color": "var(--grey-200, #E5E5E5)",
+              "align-items": "center",
+              "justify-content": "start",
+              "flex-direction": "row",
+              "gap": "8px"
+            },
+            "styleVariables": {}
+          },
+          "count-display": {
+            "tag": "p",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "count-value"
+              }
+            },
+            "style": {
+              "display": "inline-block"
+            },
+            "events": {},
+            "classes": {},
+            "children": [
+              "count-text"
+            ],
+            "styleVariables": {}
+          },
+          "count-text": {
+            "type": "text",
+            "value": {
+              "type": "function",
+              "name": "@toddle/concatenate",
+              "arguments": [
+                {
+                  "name": "0",
+                  "formula": {
+                    "type": "value",
+                    "value": "Count: "
+                  },
+                  "type": {
+                    "type": "Union",
+                    "types": [
+                      {
+                        "type": "String"
+                      },
+                      {
+                        "type": "Array",
+                        "ofType": {
+                          "type": "Any"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "0",
+                  "formula": {
+                    "type": "path",
+                    "path": [
+                      "Variables",
+                      "count"
+                    ]
+                  },
+                  "type": {
+                    "type": "Union",
+                    "types": [
+                      {
+                        "type": "String"
+                      },
+                      {
+                        "type": "Array",
+                        "ofType": {
+                          "type": "Any"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ],
+              "variableArguments": true,
+              "display_name": "Concatenate"
+            }
+          },
+          "btn-inc": {
+            "tag": "button",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "btn-inc"
+              }
+            },
+            "style": {
+              "color": "var(--grey-200, #E5E5E5)",
+              "border-radius": "6px",
+              "background-color": "var(--blue-600, #2563EB)",
+              "padding": "8px",
+              "cursor": "pointer"
+            },
+            "events": {
+              "click": {
+                "trigger": "click",
+                "actions": [
+                  {
+                    "type": "SetVariable",
+                    "variable": "count",
+                    "data": {
+                      "type": "function",
+                      "name": "@toddle/add",
+                      "arguments": [
+                        {
+                          "name": "0",
+                          "formula": {
+                            "type": "path",
+                            "path": [
+                              "Variables",
+                              "count"
+                            ]
+                          },
+                          "type": {
+                            "type": "Number"
+                          }
+                        },
+                        {
+                          "name": "1",
+                          "formula": {
+                            "type": "value",
+                            "value": 1
+                          },
+                          "type": {
+                            "type": "Number"
+                          }
+                        }
+                      ],
+                      "variableArguments": true,
+                      "display_name": "Add"
+                    }
+                  }
+                ]
+              }
+            },
+            "classes": {},
+            "children": [
+              "text-inc"
+            ],
+            "styleVariables": {}
+          },
+          "text-inc": {
+            "type": "text",
+            "value": {
+              "type": "value",
+              "value": "+"
+            }
+          },
+          "btn-dec": {
+            "tag": "button",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "btn-dec"
+              }
+            },
+            "style": {
+              "color": "var(--grey-200, #E5E5E5)",
+              "border-radius": "6px",
+              "background-color": "var(--blue-600, #2563EB)",
+              "padding": "8px",
+              "cursor": "pointer"
+            },
+            "events": {
+              "click": {
+                "trigger": "click",
+                "actions": [
+                  {
+                    "type": "SetVariable",
+                    "variable": "count",
+                    "data": {
+                      "type": "function",
+                      "name": "@toddle/max",
+                      "arguments": [
+                        {
+                          "name": "0",
+                          "formula": {
+                            "type": "function",
+                            "name": "@toddle/minus",
+                            "arguments": [
+                              {
+                                "name": "Minuend",
+                                "formula": {
+                                  "type": "path",
+                                  "path": [
+                                    "Variables",
+                                    "count"
+                                  ]
+                                },
+                                "type": {
+                                  "type": "Number"
+                                }
+                              },
+                              {
+                                "name": "Substrahend",
+                                "formula": {
+                                  "type": "value",
+                                  "value": 1
+                                },
+                                "type": {
+                                  "type": "Number"
+                                }
+                              }
+                            ],
+                            "display_name": "Minus"
+                          },
+                          "type": {
+                            "type": "Number"
+                          }
+                        },
+                        {
+                          "name": "1",
+                          "formula": {
+                            "type": "value",
+                            "value": 0
+                          },
+                          "type": {
+                            "type": "Number"
+                          }
+                        }
+                      ],
+                      "variableArguments": true,
+                      "display_name": "Max"
+                    }
+                  }
+                ]
+              }
+            },
+            "classes": {},
+            "children": [
+              "text-dec"
+            ],
+            "styleVariables": {}
+          },
+          "text-dec": {
+            "type": "text",
+            "value": {
+              "type": "value",
+              "value": "-"
+            }
+          }
+        }
+      },
+      "LifecyclePage": {
+        "name": "LifecyclePage",
+        "apis": {},
+        "attributes": {},
+        "onLoad": null,
+        "events": [],
+        "formulas": {},
+        "variables": {
+          "showSubtree": {
+            "initialValue": {
+              "type": "value",
+              "value": false
+            }
+          },
+          "items": {
+            "initialValue": {
+              "type": "function",
+              "name": "@toddle/range",
+              "arguments": [
+                {
+                  "name": "Min",
+                  "formula": {
+                    "type": "value",
+                    "value": 0
+                  },
+                  "type": {
+                    "type": "Number"
+                  }
+                },
+                {
+                  "name": "Max",
+                  "formula": {
+                    "type": "value",
+                    "value": 29
+                  },
+                  "type": {
+                    "type": "Number"
+                  }
+                }
+              ],
+              "display_name": "Range"
+            }
+          }
+        },
+        "nodes": {
+          "root": {
+            "tag": "div",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "lifecycle-root"
+              }
+            },
+            "style": {
+              "display": "flex",
+              "flex-direction": "column"
+            },
+            "events": {},
+            "classes": {},
+            "children": [
+              "btn-toggle-lifecycle",
+              "lifecycle-container"
+            ],
+            "styleVariables": {}
+          },
+          "btn-toggle-lifecycle": {
+            "tag": "button",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "btn-toggle-lifecycle"
+              }
+            },
+            "style": {
+              "display": "none"
+            },
+            "events": {
+              "click": {
+                "trigger": "click",
+                "actions": [
+                  {
+                    "type": "SetVariable",
+                    "variable": "showSubtree",
+                    "data": {
+                      "type": "function",
+                      "name": "@toddle/not",
+                      "arguments": [
+                        {
+                          "name": "Input",
+                          "formula": {
+                            "type": "path",
+                            "path": [
+                              "Variables",
+                              "showSubtree"
+                            ]
+                          },
+                          "type": {
+                            "type": "Boolean"
+                          }
+                        }
+                      ],
+                      "display_name": "Not"
+                    }
+                  }
+                ]
+              }
+            },
+            "classes": {},
+            "children": [],
+            "styleVariables": {}
+          },
+          "lifecycle-container": {
+            "tag": "div",
+            "type": "element",
+            "condition": {
+              "type": "path",
+              "path": [
+                "Variables",
+                "showSubtree"
+              ]
+            },
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "lifecycle-container"
+              }
+            },
+            "style": {
+              "padding": "10px"
+            },
+            "events": {},
+            "classes": {},
+            "children": [
+              "lifecycle-header",
+              "lifecycle-counter-1",
+              "lifecycle-counter-2",
+              "lifecycle-repeat-list"
+            ],
+            "styleVariables": {}
+          },
+          "lifecycle-header": {
+            "tag": "h3",
+            "type": "element",
+            "attrs": {},
+            "style": {},
+            "events": {},
+            "classes": {},
+            "children": [
+              "lifecycle-header-text"
+            ],
+            "styleVariables": {}
+          },
+          "lifecycle-header-text": {
+            "type": "text",
+            "value": {
+              "type": "value",
+              "value": "Active Lifecycle Subtree"
+            }
+          },
+          "lifecycle-counter-1": {
+            "type": "component",
+            "name": "counter",
+            "attrs": {},
+            "events": {},
+            "children": [],
+            "repeat": null
+          },
+          "lifecycle-counter-2": {
+            "type": "component",
+            "name": "counter",
+            "attrs": {},
+            "events": {},
+            "children": [],
+            "repeat": null
+          },
+          "lifecycle-repeat-list": {
+            "tag": "ul",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "lifecycle-list"
+              }
+            },
+            "style": {},
+            "events": {},
+            "classes": {},
+            "children": [
+              "lifecycle-repeat-item"
+            ],
+            "styleVariables": {}
+          },
+          "lifecycle-repeat-item": {
+            "tag": "li",
+            "type": "element",
+            "repeat": {
+              "type": "path",
+              "path": [
+                "Variables",
+                "items"
+              ]
+            },
+            "repeatKey": {
+              "type": "path",
+              "path": [
+                "ListItem",
+                "Item"
+              ]
+            },
+            "attrs": {
+              "data-idx": {
+                "type": "path",
+                "path": [
+                  "ListItem",
+                  "Item"
+                ]
+              }
+            },
+            "style": {
+              "padding": "2px"
+            },
+            "events": {},
+            "classes": {},
+            "children": [
+              "lifecycle-item-text"
+            ],
+            "styleVariables": {}
+          },
+          "lifecycle-item-text": {
+            "type": "text",
+            "value": {
+              "type": "function",
+              "name": "@toddle/concatenate",
+              "arguments": [
+                {
+                  "name": "0",
+                  "formula": {
+                    "type": "value",
+                    "value": "Subtree Item #"
+                  }
+                },
+                {
+                  "name": "1",
+                  "formula": {
+                    "type": "path",
+                    "path": [
+                      "ListItem",
+                      "Item"
+                    ]
+                  }
+                }
+              ],
+              "variableArguments": true,
+              "display_name": "Concatenate"
+            }
+          }
+        }
+      },
+      "StylesPage": {
+        "name": "StylesPage",
+        "apis": {},
+        "attributes": {},
+        "onLoad": null,
+        "events": [],
+        "formulas": {},
+        "variables": {
+          "isAltTheme": {
+            "initialValue": {
+              "type": "value",
+              "value": false
+            }
+          },
+          "items": {
+            "initialValue": {
+              "type": "function",
+              "name": "@toddle/range",
+              "arguments": [
+                {
+                  "name": "Min",
+                  "formula": {
+                    "type": "value",
+                    "value": 0
+                  },
+                  "type": {
+                    "type": "Number"
+                  }
+                },
+                {
+                  "name": "Max",
+                  "formula": {
+                    "type": "value",
+                    "value": 199
+                  },
+                  "type": {
+                    "type": "Number"
+                  }
+                }
+              ],
+              "display_name": "Range"
+            }
+          }
+        },
+        "nodes": {
+          "root": {
+            "tag": "div",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "styles-root"
+              }
+            },
+            "style": {
+              "display": "flex",
+              "flex-direction": "column"
+            },
+            "events": {},
+            "classes": {},
+            "children": [
+              "btn-cycle-styles",
+              "styles-list"
+            ],
+            "styleVariables": {}
+          },
+          "btn-cycle-styles": {
+            "tag": "button",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "btn-cycle-styles"
+              }
+            },
+            "style": {
+              "display": "none"
+            },
+            "events": {
+              "click": {
+                "trigger": "click",
+                "actions": [
+                  {
+                    "type": "SetVariable",
+                    "variable": "isAltTheme",
+                    "data": {
+                      "type": "function",
+                      "name": "@toddle/not",
+                      "arguments": [
+                        {
+                          "name": "Input",
+                          "formula": {
+                            "type": "path",
+                            "path": [
+                              "Variables",
+                              "isAltTheme"
+                            ]
+                          },
+                          "type": {
+                            "type": "Boolean"
+                          }
+                        }
+                      ],
+                      "display_name": "Not"
+                    }
+                  }
+                ]
+              }
+            },
+            "classes": {},
+            "children": [],
+            "styleVariables": {}
+          },
+          "styles-list": {
+            "tag": "div",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "styles-list"
+              }
+            },
+            "style": {
+              "display": "flex",
+              "flex-direction": "column"
+            },
+            "events": {},
+            "classes": {},
+            "children": [
+              "styles-repeat-item"
+            ],
+            "styleVariables": {}
+          },
+          "styles-repeat-item": {
+            "tag": "div",
+            "type": "element",
+            "repeat": {
+              "type": "path",
+              "path": [
+                "Variables",
+                "items"
+              ]
+            },
+            "repeatKey": {
+              "type": "path",
+              "path": [
+                "ListItem",
+                "Item"
+              ]
+            },
+            "attrs": {
+              "data-item": {
+                "type": "path",
+                "path": [
+                  "ListItem",
+                  "Item"
+                ]
+              }
+            },
+            "customProperties": {
+              "--item-color": {
+                "formula": {
+                  "type": "switch",
+                  "cases": [
+                    {
+                      "condition": {
+                        "type": "path",
+                        "path": [
+                          "Variables",
+                          "isAltTheme"
+                        ]
+                      },
+                      "formula": {
+                        "type": "value",
+                        "value": "#10b981"
+                      }
+                    }
+                  ],
+                  "default": {
+                    "type": "value",
+                    "value": "#6366f1"
+                  }
+                }
+              },
+              "--item-height": {
+                "formula": {
+                  "type": "switch",
+                  "cases": [
+                    {
+                      "condition": {
+                        "type": "path",
+                        "path": [
+                          "Variables",
+                          "isAltTheme"
+                        ]
+                      },
+                      "formula": {
+                        "type": "value",
+                        "value": "32px"
+                      }
+                    }
+                  ],
+                  "default": {
+                    "type": "value",
+                    "value": "24px"
+                  }
+                }
+              }
+            },
+            "style": {
+              "color": "var(--item-color)",
+              "height": "var(--item-height)"
+            },
+            "events": {},
+            "classes": {},
+            "children": [
+              "styles-item-text"
+            ],
+            "styleVariables": {}
+          },
+          "styles-item-text": {
+            "type": "text",
+            "value": {
+              "type": "function",
+              "name": "@toddle/concatenate",
+              "arguments": [
+                {
+                  "name": "0",
+                  "formula": {
+                    "type": "value",
+                    "value": "Styled Item "
+                  }
+                },
+                {
+                  "name": "1",
+                  "formula": {
+                    "type": "path",
+                    "path": [
+                      "ListItem",
+                      "Item"
+                    ]
+                  }
+                }
+              ],
+              "variableArguments": true,
+              "display_name": "Concatenate"
+            }
+          }
+        }
+      },
+      "ContextConsumer": {
+        "name": "ContextConsumer",
+        "apis": {},
+        "attributes": {
+          "itemIndex": {
+            "type": "value",
+            "value": 0
+          }
+        },
+        "contexts": {
+          "ContextPage": {
+            "formulas": [
+              "activeTheme"
+            ]
+          }
+        },
+        "onLoad": null,
+        "events": [],
+        "formulas": {},
+        "variables": {},
+        "nodes": {
+          "root": {
+            "tag": "div",
+            "type": "element",
+            "attrs": {
+              "class": {
+                "type": "value",
+                "value": "consumer-node"
+              }
+            },
+            "style": {
+              "padding": "2px"
+            },
+            "events": {},
+            "classes": {},
+            "children": [
+              "consumer-text"
+            ],
+            "styleVariables": {}
+          },
+          "consumer-text": {
+            "type": "text",
+            "value": {
+              "type": "path",
+              "path": [
+                "Contexts",
+                "ContextPage",
+                "activeTheme"
+              ]
+            }
+          }
+        }
+      },
+      "ContextPage": {
+        "name": "ContextPage",
+        "apis": {},
+        "attributes": {},
+        "onLoad": null,
+        "events": [],
+        "formulas": {
+          "activeTheme": {
+            "name": "activeTheme",
+            "exposeInContext": true,
+            "formula": {
+              "type": "switch",
+              "cases": [
+                {
+                  "condition": {
+                    "type": "path",
+                    "path": [
+                      "Variables",
+                      "isDark"
+                    ]
+                  },
+                  "formula": {
+                    "type": "value",
+                    "value": "dark-mode"
+                  }
+                }
+              ],
+              "default": {
+                "type": "value",
+                "value": "light-mode"
+              }
+            }
+          }
+        },
+        "variables": {
+          "isDark": {
+            "initialValue": {
+              "type": "value",
+              "value": false
+            }
+          },
+          "items": {
+            "initialValue": {
+              "type": "function",
+              "name": "@toddle/range",
+              "arguments": [
+                {
+                  "name": "Min",
+                  "formula": {
+                    "type": "value",
+                    "value": 0
+                  },
+                  "type": {
+                    "type": "Number"
+                  }
+                },
+                {
+                  "name": "Max",
+                  "formula": {
+                    "type": "value",
+                    "value": 199
+                  },
+                  "type": {
+                    "type": "Number"
+                  }
+                }
+              ],
+              "display_name": "Range"
+            }
+          }
+        },
+        "nodes": {
+          "root": {
+            "tag": "div",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "context-root"
+              }
+            },
+            "style": {
+              "display": "flex",
+              "flex-direction": "column"
+            },
+            "events": {},
+            "classes": {},
+            "children": [
+              "btn-toggle-context",
+              "consumer-list"
+            ],
+            "styleVariables": {}
+          },
+          "btn-toggle-context": {
+            "tag": "button",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "btn-toggle-context"
+              }
+            },
+            "style": {
+              "display": "none"
+            },
+            "events": {
+              "click": {
+                "trigger": "click",
+                "actions": [
+                  {
+                    "type": "SetVariable",
+                    "variable": "isDark",
+                    "data": {
+                      "type": "function",
+                      "name": "@toddle/not",
+                      "arguments": [
+                        {
+                          "name": "Input",
+                          "formula": {
+                            "type": "path",
+                            "path": [
+                              "Variables",
+                              "isDark"
+                            ]
+                          },
+                          "type": {
+                            "type": "Boolean"
+                          }
+                        }
+                      ],
+                      "display_name": "Not"
+                    }
+                  }
+                ]
+              }
+            },
+            "classes": {},
+            "children": [],
+            "styleVariables": {}
+          },
+          "consumer-list": {
+            "tag": "div",
+            "type": "element",
+            "attrs": {
+              "id": {
+                "type": "value",
+                "value": "context-consumer-list"
+              }
+            },
+            "style": {},
+            "events": {},
+            "classes": {},
+            "children": [
+              "consumer-item"
+            ],
+            "styleVariables": {}
+          },
+          "consumer-item": {
+            "type": "component",
+            "name": "ContextConsumer",
+            "repeat": {
+              "type": "path",
+              "path": [
+                "Variables",
+                "items"
+              ]
+            },
+            "repeatKey": {
+              "type": "path",
+              "path": [
+                "ListItem",
+                "Item"
+              ]
+            },
+            "attrs": {
+              "itemIndex": {
+                "type": "path",
+                "path": [
+                  "ListItem",
+                  "Item"
+                ]
+              }
+            },
+            "events": {},
+            "children": []
+          }
+        }
+      }
+    }
+  }
+}

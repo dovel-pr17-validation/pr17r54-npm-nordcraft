@@ -1,0 +1,298 @@
+import { describe, expect, it } from 'bun:test'
+import '../happydom'
+import { ensureEfficientOrdering, getNextSiblingElement } from './nodes'
+
+describe('getNextSiblingElement', () => {
+  it('should return null if there are no children', () => {
+    const parent = document.createElement('div')
+    expect(getNextSiblingElement('0.1', parent)).toBeNull()
+  })
+
+  it('should return the next sibling based on index', () => {
+    const parent = document.createElement('div')
+    const child1 = document.createElement('div')
+    child1.setAttribute('data-id', '0.1')
+    const child2 = document.createElement('div')
+    child2.setAttribute('data-id', '0.2')
+    parent.appendChild(child1)
+    parent.appendChild(child2)
+
+    expect(getNextSiblingElement('0.0', parent)).toBe(child1)
+    expect(getNextSiblingElement('0.1', parent)).toBe(child2)
+    expect(getNextSiblingElement('0.2', parent)).toBeNull()
+  })
+
+  it('should return the next sibling based on repeat index', () => {
+    const parent = document.createElement('div')
+    const child1 = document.createElement('div')
+    child1.setAttribute('data-id', '0.1(0)')
+    const child2 = document.createElement('div')
+    child2.setAttribute('data-id', '0.1(1)')
+    parent.appendChild(child1)
+    parent.appendChild(child2)
+
+    expect(getNextSiblingElement('0.1(0)', parent)).toBe(child2)
+    expect(getNextSiblingElement('0.1(1)', parent)).toBeNull()
+  })
+
+  it('should skip children with lower indices', () => {
+    const parent = document.createElement('div')
+    const child1 = document.createElement('div')
+    child1.setAttribute('data-id', '0.1')
+    const child2 = document.createElement('div')
+    child2.setAttribute('data-id', '0.3')
+    parent.appendChild(child1)
+    parent.appendChild(child2)
+
+    expect(getNextSiblingElement('0.2', parent)).toBe(child2)
+  })
+
+  it('should work with complex paths', () => {
+    const parent = document.createElement('div')
+    const child = document.createElement('div')
+    child.setAttribute('data-id', '1.2.3(5)')
+    parent.appendChild(child)
+
+    expect(getNextSiblingElement('1.2.3(4)', parent)).toBe(child)
+    expect(getNextSiblingElement('1.2.3(5)', parent)).toBeNull()
+    expect(getNextSiblingElement('1.2.2', parent)).toBe(child)
+  })
+
+  it('should return the next sibling when item has no parentheses (default repeat item)', () => {
+    const parent = document.createElement('div')
+    const child3 = document.createElement('div')
+    child3.setAttribute('data-id', '0.1(3)')
+    parent.appendChild(child3)
+
+    expect(getNextSiblingElement('0.1', parent)).toBe(child3)
+    expect(getNextSiblingElement('0.1(1)', parent)).toBe(child3)
+    expect(getNextSiblingElement('0.1(2)', parent)).toBe(child3)
+    expect(getNextSiblingElement('0.1(3)', parent)).toBeNull()
+    expect(getNextSiblingElement('0.1(4)', parent)).toBeNull()
+  })
+
+  it('should return next node sibling when repeat item has highest repeat index', () => {
+    const parent = document.createElement('div')
+    const child3 = document.createElement('div')
+    child3.setAttribute('data-id', '0.1(3)')
+    const nextNode = document.createElement('div')
+    nextNode.setAttribute('data-id', '0.2')
+    parent.appendChild(child3)
+    parent.appendChild(nextNode)
+
+    expect(getNextSiblingElement('0.1', parent)).toBe(child3)
+    expect(getNextSiblingElement('0.1(3)', parent)).toBe(nextNode)
+    expect(getNextSiblingElement('0.1(4)', parent)).toBe(nextNode)
+  })
+
+  it('should skip repeat siblings of the same node when ignoreRepeat is true', () => {
+    const parent = document.createElement('div')
+    const child0 = document.createElement('div')
+    child0.setAttribute('data-id', '0.1')
+    const child1 = document.createElement('div')
+    child1.setAttribute('data-id', '0.1(1)')
+    const child2 = document.createElement('div')
+    child2.setAttribute('data-id', '0.1(2)')
+    parent.append(child0, child1, child2)
+
+    expect(getNextSiblingElement('0.1', parent, true)).toBeNull()
+
+    const nextNode = document.createElement('div')
+    nextNode.setAttribute('data-id', '0.2')
+    parent.appendChild(nextNode)
+
+    expect(getNextSiblingElement('0.1', parent, true)).toBe(nextNode)
+  })
+})
+
+describe('ensureEfficientOrdering and getNextSiblingElement together', () => {
+  it('should insert a new item in the correct position among existing items', () => {
+    const parent = document.createElement('div')
+
+    // Initial state: [node-1, node-3]
+    const node1 = document.createElement('div')
+    node1.setAttribute('data-id', '0.1')
+    const node3 = document.createElement('div')
+    node3.setAttribute('data-id', '0.3')
+
+    parent.appendChild(node1)
+    parent.appendChild(node3)
+
+    // We want to insert node-2 (data-id: 0.2)
+    const node2 = document.createElement('div')
+    node2.setAttribute('data-id', '0.2')
+
+    // Find where node2 should go
+    const nextSibling = getNextSiblingElement('0.2', parent)
+    expect(nextSibling).toBe(node3)
+
+    // Use ensureEfficientOrdering to place it using nextSibling as the anchor
+    ensureEfficientOrdering(parent, [node1, node2], nextSibling)
+
+    expect(parent.childNodes[0]).toBe(node1)
+    expect(parent.childNodes[1]).toBe(node2)
+    expect(parent.childNodes[2]).toBe(node3)
+  })
+
+  it('should handle repeat indices correctly when inserting', () => {
+    const parent = document.createElement('div')
+
+    const node1_0 = document.createElement('div')
+    node1_0.setAttribute('data-id', '0.1(0)')
+    const node1_2 = document.createElement('div')
+    node1_2.setAttribute('data-id', '0.1(2)')
+
+    parent.appendChild(node1_0)
+    parent.appendChild(node1_2)
+
+    const node1_1 = document.createElement('div')
+    node1_1.setAttribute('data-id', '0.1(1)')
+
+    const nextSibling = getNextSiblingElement('0.1(1)', parent)
+    expect(nextSibling).toBe(node1_2)
+
+    // Use ensureEfficientOrdering to place it using nextSibling as the anchor
+    ensureEfficientOrdering(parent, [node1_0, node1_1], nextSibling)
+
+    expect(parent.childNodes[0]).toBe(node1_0)
+    expect(parent.childNodes[1]).toBe(node1_1)
+    expect(parent.childNodes[2]).toBe(node1_2)
+  })
+})
+
+describe('ensureEfficientOrdering', () => {
+  it('should append items to an empty parent', () => {
+    const parent = document.createElement('div')
+    const item1 = document.createElement('span')
+    const item2 = document.createElement('span')
+
+    ensureEfficientOrdering(parent, [item1, item2])
+
+    expect(parent.childNodes.length).toBe(2)
+    expect(parent.childNodes[0]).toBe(item1)
+    expect(parent.childNodes[1]).toBe(item2)
+  })
+
+  it('should insert items at the correct position without moving existing balanced items', () => {
+    const parent = document.createElement('div')
+    const existing1 = document.createElement('div')
+    const existing2 = document.createElement('div')
+    parent.appendChild(existing1)
+    parent.appendChild(existing2)
+
+    const newItem = document.createElement('span')
+
+    // Insert newItem before existing2
+    ensureEfficientOrdering(parent, [existing1, newItem, existing2])
+
+    expect(parent.childNodes.length).toBe(3)
+    expect(parent.childNodes[0]).toBe(existing1)
+    expect(parent.childNodes[1]).toBe(newItem)
+    expect(parent.childNodes[2]).toBe(existing2)
+  })
+
+  it('should reorder items if they are not in the correct order', () => {
+    const parent = document.createElement('div')
+    const item1 = document.createElement('div')
+    const item2 = document.createElement('div')
+    parent.appendChild(item2)
+    parent.appendChild(item1)
+
+    // Desired order is item1, item2
+    ensureEfficientOrdering(parent, [item1, item2])
+
+    expect(parent.childNodes.length).toBe(2)
+    expect(parent.childNodes[0]).toBe(item1)
+    expect(parent.childNodes[1]).toBe(item2)
+  })
+
+  it('should handle a mix of Elements and Text nodes', () => {
+    const parent = document.createElement('div')
+    const item1 = document.createElement('span')
+    const item2 = document.createTextNode('text node')
+
+    ensureEfficientOrdering(parent, [item1, item2])
+
+    expect(parent.childNodes.length).toBe(2)
+    expect(parent.childNodes[0]).toBe(item1)
+    expect(parent.childNodes[1]).toBe(item2)
+  })
+
+  it('should insert before a specified nextElement', () => {
+    const parent = document.createElement('div')
+    const spacer = document.createElement('div')
+    parent.appendChild(spacer)
+
+    const item1 = document.createElement('span')
+    const item2 = document.createElement('span')
+
+    ensureEfficientOrdering(parent, [item1, item2], spacer)
+
+    expect(parent.childNodes.length).toBe(3)
+    expect(parent.childNodes[0]).toBe(item1)
+    expect(parent.childNodes[1]).toBe(item2)
+    expect(parent.childNodes[2]).toBe(spacer)
+  })
+
+  it('should handle moving an item from the end to the beginning', () => {
+    const parent = document.createElement('div')
+    const item1 = document.createElement('div')
+    const item2 = document.createElement('div')
+    const item3 = document.createElement('div')
+    parent.appendChild(item1)
+    parent.appendChild(item2)
+    parent.appendChild(item3)
+
+    // Move item3 to the front
+    ensureEfficientOrdering(parent, [item3, item1, item2])
+
+    expect(parent.childNodes[0]).toBe(item3)
+    expect(parent.childNodes[1]).toBe(item1)
+    expect(parent.childNodes[2]).toBe(item2)
+  })
+
+  it('should use moveBefore for existing connected children and insertBefore for new children when supported', () => {
+    const parent = document.createElement('div')
+    document.body.appendChild(parent)
+    const item1 = document.createElement('div')
+    const item2 = document.createElement('div')
+    const newItem = document.createElement('div')
+    parent.append(item2, item1)
+
+    const moved: Node[] = []
+    const inserted: Node[] = []
+    const origInsertBefore = parent.insertBefore.bind(parent)
+    parent.moveBefore = (node: Node, child: Node | null) => {
+      moved.push(node)
+      origInsertBefore(node, child)
+    }
+    parent.insertBefore = (<T extends Node>(node: T, child: Node | null): T => {
+      inserted.push(node)
+      return origInsertBefore(node, child)
+    }) as typeof parent.insertBefore
+
+    ensureEfficientOrdering(parent, [newItem, item1, item2])
+
+    expect(moved).toEqual([item2])
+    expect(inserted).toEqual([newItem])
+    expect(Array.from(parent.childNodes)).toEqual([newItem, item1, item2])
+    parent.remove()
+  })
+
+  it('should fall back to insertBefore when parent is disconnected even if moveBefore exists', () => {
+    const parent = document.createElement('div')
+    const item1 = document.createElement('div')
+    const item2 = document.createElement('div')
+    parent.append(item2, item1)
+
+    let moveCalled = false
+    parent.moveBefore = () => {
+      moveCalled = true
+    }
+
+    ensureEfficientOrdering(parent, [item1, item2])
+
+    expect(moveCalled).toBe(false)
+    expect(Array.from(parent.childNodes)).toEqual([item1, item2])
+  })
+})

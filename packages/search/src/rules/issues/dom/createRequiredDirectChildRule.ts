@@ -1,0 +1,48 @@
+import type { ComponentNodeNode, IssueRule, Level } from '../../../types'
+
+export function createRequiredDirectChildRule(
+  parentTags: string[],
+  childTags: string[],
+  level: Level = 'warning',
+): IssueRule<
+  {
+    parentTag: string
+    childTag: string
+    allowedChildTags: string[]
+  },
+  ComponentNodeNode
+> {
+  return {
+    code: 'required direct child',
+    level,
+    category: 'Accessibility',
+    nodeTypes: 'component-node',
+    visit: (report, args) => {
+      const { value, component, path } = args
+      if (value?.type !== 'element' || !parentTags.includes(value.tag)) {
+        return
+      }
+      const getElement = (id: string) => component.nodes?.[id]
+      ;(value.children ?? []).forEach((childId) => {
+        const childNode = getElement(childId)
+        if (
+          childNode?.type === 'element' &&
+          !childTags.includes(childNode.tag)
+        ) {
+          report({
+            path: [...path.slice(0, 3), childId],
+            info: {
+              title: 'Invalid child element',
+              description: `**${childNode.tag}** should not be a direct first decedent of **${value.tag}**. Valid children are: *${childTags.join('*, *')}*.`,
+            },
+            details: {
+              parentTag: value.tag,
+              childTag: childNode.tag,
+              allowedChildTags: childTags,
+            },
+          })
+        }
+      })
+    },
+  }
+}

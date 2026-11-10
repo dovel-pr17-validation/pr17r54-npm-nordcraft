@@ -1,0 +1,152 @@
+import type {
+  ComponentData,
+  SupportedNamespaces,
+  TextNodeModel,
+} from '@nordcraft/core'
+import '@nordcraft/core/compileTime'
+
+import {
+  applyFormula,
+  DATA_ATTR_COMPONENT,
+  DATA_ATTR_ID,
+  DATA_ATTR_NODE_ID,
+  DATA_ATTR_NODE_TYPE,
+  DATA_NODE_TYPE_TEXT,
+  isDefined,
+} from '@nordcraft/core'
+import type { Signal } from '../signal/signal'
+import type { ComponentContext } from '../types'
+import { claimHydratedChild, type HydrationState } from './hydration'
+
+export type RenderTextProps = {
+  node: TextNodeModel
+  dataSignal: Signal<ComponentData>
+  id: string
+  path: string
+  namespace?: SupportedNamespaces
+  ctx: ComponentContext
+  parentElement?: Element | ShadowRoot
+  hydration?: HydrationState
+}
+
+/**
+ * Create a text node
+ *
+ * Note: We wrap the text in a <span> to make it easier to select/highlight the text node in the preview.
+ * We should find a better way to do this without wrapping the node, and instead use `createTextNode`.
+ */
+export function createText({
+  node,
+  id,
+  path,
+  dataSignal,
+  namespace,
+  ctx,
+  parentElement,
+  hydration,
+}: RenderTextProps): HTMLSpanElement | Text {
+  // Span element is not valid outside of the default namespace
+  if (namespace && namespace !== 'http://www.w3.org/1999/xhtml') {
+    return createTextNS({ node, dataSignal, ctx })
+  }
+
+  const { value } = node
+  const claimed =
+    IS_PAGE && hydration && !hydration.sealed && parentElement
+      ? (claimHydratedChild(
+          parentElement,
+          path,
+          hydration,
+          'span',
+        ) as HTMLSpanElement | null)
+      : null
+  const elem = claimed ?? document.createElement('span')
+  if (IS_PAGE && hydration && !hydration.sealed && !claimed) {
+    hydration.adopted.add(elem)
+  }
+
+  // This is editor only logic and we should move out of the runtime bundle when possible
+  if (
+    IS_PREVIEW &&
+    ctx.env?.runtime === 'preview' &&
+    isDefined(ctx.component?.nodes)
+  ) {
+    let slotName: string | undefined | null
+
+    for (const node of Object.values(ctx.component.nodes)) {
+      if (node?.type !== 'slot') continue
+
+      if (node.children?.includes(id)) {
+        slotName = node?.name ?? 'default'
+      }
+
+      if (slotName) break
+    }
+
+    if (slotName) {
+      elem.setAttribute('data-node-slot-name', slotName)
+    }
+  }
+  if (!claimed) {
+    if (ctx.isRootComponent) {
+      elem.setAttribute('data-is-root-component', 'true')
+    }
+    elem.setAttribute(DATA_ATTR_NODE_ID, id)
+    if (typeof id === 'string') {
+      elem.setAttribute(DATA_ATTR_ID, path)
+    }
+    if (ctx.isRootComponent === false) {
+      elem.setAttribute(DATA_ATTR_COMPONENT, ctx.component.name)
+    }
+    elem.setAttribute(DATA_ATTR_NODE_TYPE, DATA_NODE_TYPE_TEXT)
+  }
+  if (value.type !== 'value') {
+    const valuePath =
+      IS_PREVIEW && ctx.reportFormulaEvaluation ? ['value'] : undefined
+    const sig = dataSignal.map((data) =>
+      String(applyFormula(value, ctx, data, valuePath)),
+    )
+    sig.subscribe((value) => {
+      elem.innerText = value
+    })
+  } else {
+    if (IS_PREVIEW) {
+      ctx.reportFormulaEvaluation?.(
+        [...(ctx.jsonPath ?? []), 'value'],
+        value.value,
+        ctx,
+      )
+    }
+    if (!claimed) {
+      elem.innerText = String(value.value)
+    }
+  }
+  return elem
+}
+
+/**
+ * This function is technically more performant than `createText` because it doesn't create a wrapping <span> element.
+ * We would like to use this everywhere eventually, but we need to handle raw text selection in the editor (possibly by utilizing text ranges).
+ */
+export function createTextNS({
+  node,
+  dataSignal,
+  ctx,
+}: Pick<RenderTextProps, 'node' | 'dataSignal' | 'ctx'>): Text {
+  const { value } = node
+  const textNode = document.createTextNode('')
+  if (value.type !== 'value') {
+    const valuePathNS =
+      IS_PREVIEW && ctx.reportFormulaEvaluation ? ['value'] : undefined
+    const sig = dataSignal.map((data) =>
+      String(applyFormula(value, ctx, data, valuePathNS)),
+    )
+    sig.subscribe((value) => {
+      textNode.nodeValue = value
+    })
+  } else {
+    textNode.nodeValue = String(value.value)
+  }
+
+  return textNode
+}
